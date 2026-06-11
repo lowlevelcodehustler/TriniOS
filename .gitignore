@@ -1,0 +1,121 @@
+TriniOS_Build_Plan.md
+# TriniOS Build Plan — keep private
+
+# =====================
+# Build Artifacts
+# =====================
+build/
+out/
+dist/
+*.o
+*.a
+*.so
+*.so.*
+*.ko
+*.mod
+*.symvers
+*.mod.c
+*.order
+*.gcno
+*.gcda
+*.gcov
+
+# =====================
+# Kernel Build Outputs
+# =====================
+kernel/Output/
+kernel/*.img
+kernel/*.bin
+kernel/*.elf
+kernel/System.map
+kernel/vmlinux
+kernel/vmlinuz
+
+# =====================
+# Bootloader Outputs
+# =====================
+boot/*.img
+boot/*.iso
+
+# =====================
+# QEMU / VM Images
+# =====================
+*.qcow2
+*.raw
+*.vdi
+*.vmdk
+
+# =====================
+# IDE / Editor Files
+# =====================
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# =====================
+# Temporary Files
+# =====================
+*.tmp
+*.bak
+*.log
+*.cache
+
+# =====================
+# Package Manager / AUR
+# =====================
+*.pkg.tar.zst
+*.pkg.tar.xz
+
+# =====================
+# Python
+# =====================
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+
+# =====================
+# CMake
+# =====================
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
+compile_commands.json
+
+# =====================
+# Ninja
+# =====================
+.ninja_deps
+.ninja_log
+
+# =====================
+# Cross-compiler Build
+# =====================
+toolchain/build/
+toolchain/install/
+
+# =====================
+# Test Artifacts
+# =====================
+tests/results/
+tests/coverage/
+
+# =====================
+# Documentation Build
+# =====================
+docs/_build/
+docs/html/
+
+# =====================
+# Private Keys / Secrets
+# =====================
+*.key
+*.pem
+*.crt
+secrets/
