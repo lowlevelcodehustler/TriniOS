@@ -1,0 +1,3 @@
+[submodule "kernel/gnumach"]
+	path = kernel/gnumach
+	url = git://git.savannah.gnu.org/hurd/gnumach.git
