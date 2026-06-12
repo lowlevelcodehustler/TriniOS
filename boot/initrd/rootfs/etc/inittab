@@ -1,0 +1,25 @@
+# /etc/inittab - Init configuration for TriniOS
+#
+# Format: <id>:<runlevels>:<action>:<process>
+#
+# Note: TriniOS init is simplified (not SysV-init compatible)
+# This file serves as documentation for the boot sequence
+
+# Boot-time actions
+si::sysinit:/sbin/init
+# Console getty (terminal login)
+c1:12345:respawn:/sbin/getty 38400 console
+# Default shell on console
+co:12345:respawn:/bin/sh
+
+# Runlevel definitions
+# 0 - halt
+# 1 - single user mode
+# 2 - multi-user mode (no network)
+# 3 - multi-user mode (full)
+# 4 - reserved
+# 5 - graphical mode
+# 6 - reboot
+
+# Default runlevel
+id:3:initdefault:

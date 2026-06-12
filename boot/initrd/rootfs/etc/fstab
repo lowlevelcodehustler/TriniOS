@@ -1,0 +1,16 @@
+# /etc/fstab - Filesystem table for TriniOS
+#
+# <device>    <mount point>  <type>  <options>       <dump> <pass>
+#
+# Initial RAM disk - the rootfs is already in memory
+tmpfs         /              tmpfs   size=50%,mode=0755  0  0
+
+# Device filesystems (mounted by init)
+none          /dev           devtmpfs  defaults        0  0
+none          /dev/pts       devpts    gid=5,mode=620  0  0
+none          /proc          proc      defaults        0  0
+none          /sys           sysfs     ro,nosuid       0  0
+none          /tmp           tmpfs     defaults        0  0
+
+# Persistent storage (mounted after filesystem server starts)
+# /dev/sda1     /mnt         ext4      defaults        0  1

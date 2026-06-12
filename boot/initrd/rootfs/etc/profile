@@ -1,0 +1,32 @@
+# /etc/profile - System-wide shell profile for TriniOS
+
+# System-wide environment variables
+export PATH="/bin:/sbin:/usr/bin:/usr/sbin"
+export HOME="/"
+export SHELL="/bin/sh"
+export TERM="xterm"
+export USER="root"
+export HOSTNAME="trini"
+export LANG="en_US.UTF-8"
+export EDITOR="vi"
+export PAGER="less"
+
+# TriniOS specific
+export TRINIOS_VERSION="0.1"
+export TRINIOS_RELEASE="alpha"
+
+# Prompt configuration
+PS1="\u@\h:\w\$ "
+PS2="> "
+PS4="+ "
+
+# History settings
+HISTSIZE=1000
+HISTFILESIZE=2000
+
+# umask for file creation
+umask 022
+
+# Welcome message
+echo "Welcome to TriniOS ${TRINIOS_VERSION} (${TRINIOS_RELEASE})"
+echo "Type 'help' for available commands."
