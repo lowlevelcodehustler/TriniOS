@@ -14,6 +14,7 @@
 
 #include "multiboot2_info.h"
 #include "initrd_loader.h"
+#include "kernel_selftest.h"
 #include <stdint.h>
 
 /* ── Forward declarations (kernel subsystems) ──────────────────────────── */
@@ -95,11 +96,15 @@ void kernel_main(uint64_t mb_info_ptr)
         kernel_early_console("WARNING: No initrd loaded\n");
     }
 
-    /* ── Step 4: Initialize host subsystem ───────────────────────────── */
+    /* ── Step 4: Run kernel self-tests ──────────────────────────────── */
+    kernel_early_console("Running kernel self-tests...\n");
+    kernel_selftest_run();
+
+    /* ── Step 5: Initialize host subsystem ──────────────────────────── */
     kernel_early_console("Initializing host subsystem...\n");
     init_host_subsystem();
 
-    /* ── Step 5: Create first task (init process) ────────────────────── */
+    /* ── Step 6: Create first task (init process) ───────────────────── */
     kernel_early_console("Creating first task (init)...\n");
     create_first_task();
 

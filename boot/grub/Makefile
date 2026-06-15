@@ -16,7 +16,13 @@ BOOT_DIR    := $(ROOT_DIR)/boot
 
 SRC_DIR     := .
 KERNEL_SRC  := $(KERNEL_DIR)/gnumach/x86_64
+KERNEL_INC  := $(KERNEL_DIR)/gnumach/include
 MM_SRC      := $(KERNEL_DIR)/mm
+IPC_SRC     := $(KERNEL_DIR)/ipc
+TASK_SRC    := $(KERNEL_DIR)/task
+HOST_SRC    := $(KERNEL_DIR)/host
+ASI_SRC     := $(KERNEL_DIR)/asi
+TEST_SRC    := $(KERNEL_DIR)/test
 
 BUILD_DIR   := $(ROOT_DIR)/build/kernel
 OUTPUT_BIN  := $(BUILD_DIR)/trini-kernel.bin
@@ -33,7 +39,9 @@ OBJDUMP     ?= objdump
 CFLAGS      := -std=c11 -Wall -Wextra -Werror=return-type \
                -ffreestanding -fno-stack-protector -fno-pie \
                -nostdlib -fno-common \
-               -I$(SRC_DIR) -I$(KERNEL_SRC) -I$(MM_SRC) \
+               -I$(SRC_DIR) -I$(KERNEL_INC) -I$(KERNEL_INC)/mach \
+               -I$(MM_SRC) -I$(IPC_SRC) -I$(TASK_SRC) -I$(HOST_SRC) -I$(ASI_SRC) \
+               -I$(TEST_SRC) \
                -O2 -m64 -mcmodel=kernel \
                -fno-exceptions -fno-strict-aliasing
 
@@ -49,7 +57,12 @@ LDFLAGS     := -T $(SRC_DIR)/kernel.ld \
 ASM_SRCS    := $(wildcard $(SRC_DIR)/*.asm)
 C_SRCS      := $(wildcard $(SRC_DIR)/*.c) \
                $(wildcard $(KERNEL_SRC)/*.c) \
-               $(wildcard $(MM_SRC)/*.c)
+               $(wildcard $(MM_SRC)/*.c) \
+               $(wildcard $(IPC_SRC)/*.c) \
+               $(wildcard $(TASK_SRC)/*.c) \
+               $(wildcard $(HOST_SRC)/*.c) \
+               $(wildcard $(ASI_SRC)/*.c) \
+               $(wildcard $(TEST_SRC)/*.c)
 
 # ── Object files ───────────────────────────────────────────────────────
 ASM_OBJS    := $(patsubst $(SRC_DIR)/%.asm,$(BUILD_DIR)/%.o,$(ASM_SRCS))
