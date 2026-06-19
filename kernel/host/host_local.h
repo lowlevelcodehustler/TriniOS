@@ -9,10 +9,6 @@
 #define HOST_LOCAL_H
 
 #include <mach/mach.h>
-#include <mach/host.h>
-#include <mach/host_info.h>
-#include <mach/vm_map.h>
-#include <mach/processor_set.h>
 #include <stdint.h>
 #include <stdbool.h>
 
@@ -46,7 +42,7 @@ typedef struct {
     bool                aes_ni;             /* AES-NI support */
     bool                sse4;               /* SSE4 support */
     bool                avx;                /* AVX support */
-} host_info_t;
+} trini_host_info_t;
 
 /* ============================================================================
  * Processor Information
@@ -62,7 +58,7 @@ typedef struct {
     uint32_t            load;               /* Current load (0-100%) */
     uint32_t            temp;               /* Temperature (Celsius) */
     bool                active;             /* Processor is active */
-} processor_info_t;
+} trini_processor_info_t;
 
 /* ============================================================================
  * Memory Information
@@ -78,7 +74,7 @@ typedef struct {
     uint64_t            free_count;         /* Free pages */
     uint64_t            page_size;          /* Page size */
     uint64_t            totalPages;         /* Total pages */
-} memory_info_t;
+} trini_memory_info_t;
 
 /* ============================================================================
  * Boot Parameters
@@ -118,16 +114,16 @@ kern_return_t host_init_subsystems(void);
  * ============================================================================ */
 
 /* Get host information */
-kern_return_t host_get_info(host_info_t *info);
+kern_return_t host_get_info(trini_host_info_t *info);
 
 /* Get processor information */
-kern_return_t host_get_processor_info(uint32_t cpu_id, processor_info_t *info);
+kern_return_t host_get_processor_info(uint32_t cpu_id, trini_processor_info_t *info);
 
 /* Get number of processors */
 uint32_t host_get_cpu_count(void);
 
 /* Get memory information */
-kern_return_t host_get_memory_info(memory_info_t *info);
+kern_return_t host_get_memory_info(trini_memory_info_t *info);
 
 /* Set hostname */
 kern_return_t host_set_hostname(const char *name);

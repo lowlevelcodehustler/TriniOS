@@ -9,10 +9,6 @@
 #define TASK_MANAGER_H
 
 #include <mach/mach.h>
-#include <mach/task.h>
-#include <mach/thread_act.h>
-#include <mach/vm_map.h>
-#include <mach/exception.h>
 #include <stdint.h>
 #include <stdbool.h>
 
@@ -26,7 +22,6 @@
 #define TASK_ENV_MAX            128
 #define TASK_PATH_MAX           512
 #define TASK_STACK_DEFAULT      (8 * 1024 * 1024)   /* 8MB */
-#define TASK_SCHED_DEFAULT      TASK_SCHED_RR_INTERVAL
 
 /* ============================================================================
  * Task States
@@ -38,7 +33,7 @@ typedef enum {
     TASK_STATE_WAITING,       /* Waiting for child (waitpid) */
     TASK_STATE_ZOMBIE,        /* Exited but not reaped */
     TASK_STATE_DEAD           /* Fully terminated */
-} task_state_t;
+} trini_task_state_t;
 
 /* ============================================================================
  * Thread States
@@ -51,7 +46,7 @@ typedef enum {
     THREAD_STATE_BLOCKED,
     THREAD_STATE_HALTED,
     THREAD_STATE_DEAD
-} thread_state_t;
+} trini_thread_state_t;
 
 /* ============================================================================
  * Thread Descriptor
@@ -60,7 +55,7 @@ typedef enum {
 typedef struct thread_desc {
     thread_t            thread;         /* Mach thread */
     char                name[TASK_NAME_MAX_LEN];
-    thread_state_t      state;
+    trini_thread_state_t state;
     int                 priority;       /* Scheduling priority */
     vm_offset_t         stack_base;     /* Stack base address */
     vm_size_t           stack_size;     /* Stack size */
@@ -77,7 +72,7 @@ typedef struct task_desc {
     task_t              task;           /* Mach task */
     char                name[TASK_NAME_MAX_LEN];
     char                path[TASK_PATH_MAX];  /* Executable path */
-    task_state_t        state;
+    trini_task_state_t  state;
     int                 pid;            /* Process ID (BSD-compatible) */
     int                 ppid;           /* Parent PID */
     int                 pgid;           /* Process group ID */
@@ -159,17 +154,17 @@ typedef struct {
     int                 ppid;
     char                name[TASK_NAME_MAX_LEN];
     char                path[TASK_PATH_MAX];
-    task_state_t        state;
+    trini_task_state_t  state;
     uint32_t            thread_count;
     vm_size_t           vm_size;
     uint64_t            user_time;
     uint64_t            system_time;
-} task_info_t;
+} trini_task_info_t;
 
-kern_return_t task_get_info(task_desc_t *desc, task_info_t *info);
+kern_return_t task_get_info(task_desc_t *desc, trini_task_info_t *info);
 
 /* List all tasks */
-uint32_t task_list_all(task_desc_t *list, uint32_t max_count);
+uint32_t task_list_all(task_desc_t **list, uint32_t max_count);
 
 /* ============================================================================
  * Thread Management
@@ -193,7 +188,7 @@ thread_desc_t *thread_get_by_mach_thread(thread_t thread);
 kern_return_t thread_set_priority(thread_desc_t *desc, int priority);
 
 /* Get thread state */
-thread_state_t thread_get_state(thread_desc_t *desc);
+trini_thread_state_t thread_get_state(thread_desc_t *desc);
 
 /* ============================================================================
  * Scheduling
@@ -211,10 +206,10 @@ kern_return_t thread_set_policy(thread_desc_t *desc, int policy, int priority);
 
 /* Install exception handler for a task */
 kern_return_t task_install_exception_handler(task_desc_t *desc,
-                                             exception_mask_t mask,
+                                             uint32_t mask,
                                              mach_port_t handler,
-                                             exception_behavior_t behavior,
-                                             thread_state_flavor_t flavor);
+                                             uint32_t behavior,
+                                             uint32_t flavor);
 
 /* ============================================================================
  * PID Management

@@ -12,8 +12,8 @@
 #ifndef INITRD_LOADER_H
 #define INITRD_LOADER_H
 
-#include <mach/types.h>
-#include <mach/vm.h>
+#include <mach/mach.h>
+#include <stdint.h>
 #include <stdbool.h>
 
 /* ============================================================================

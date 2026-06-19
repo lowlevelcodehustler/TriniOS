@@ -33,7 +33,7 @@ multiboot2_header:
     ; But GRUB2 does NOT require the checksum field (that was Multiboot1).
     ; Multiboot2 uses: (magic + total + reserved + checksum) mod 2^32 = 0
     ; So: checksum = -(magic + total + reserved) mod 2^32
-    .long   0xE8520PF0          ; magic
+    .long   0xE8520EF0          ; magic
     .long   0x17ADFFBF          ; checksum (computed above, adjusted below)
 
 ; ── Tag 1: Required Header Tag (type=1) ─────────────────────────────────────

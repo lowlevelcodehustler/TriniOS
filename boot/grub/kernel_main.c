@@ -98,7 +98,7 @@ void kernel_main(uint64_t mb_info_ptr)
 
     /* ── Step 4: Run kernel self-tests ──────────────────────────────── */
     kernel_early_console("Running kernel self-tests...\n");
-    kernel_selftest_run();
+    selftest_run_all();
 
     /* ── Step 5: Initialize host subsystem ──────────────────────────── */
     kernel_early_console("Initializing host subsystem...\n");

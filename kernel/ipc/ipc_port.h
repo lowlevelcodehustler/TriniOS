@@ -155,19 +155,19 @@ kern_return_t ipc_port_set_remove(mach_port_t port);
 
 /* Send a message to a server (with timeout) */
 kern_return_t ipc_send_to_server(ipc_server_type_t server_type,
-                                 mach_msg_t message,
-                                 mach_msg_size_t message_size,
-                                 uint64_t timeout_ms);
+                                  mach_msg_header_t *message,
+                                  mach_msg_size_t message_size,
+                                  uint64_t timeout_ms);
 
 /* Receive a message on a port set */
 kern_return_t ipc_receive_from_set(ipc_port_set_t *port_set,
-                                   mach_msg_t *message,
-                                   mach_msg_size_t max_size);
+                                    mach_msg_header_t *message,
+                                    mach_msg_size_t max_size);
 
 /* Send a reply */
 kern_return_t ipc_send_reply(mach_port_t reply_port,
-                             mach_msg_t reply,
-                             mach_msg_size_t reply_size);
+                              mach_msg_header_t *reply,
+                              mach_msg_size_t reply_size);
 
 /* ============================================================================
  * Request Tracking

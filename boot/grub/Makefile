@@ -16,7 +16,7 @@ BOOT_DIR    := $(ROOT_DIR)/boot
 
 SRC_DIR     := .
 KERNEL_SRC  := $(KERNEL_DIR)/gnumach/x86_64
-KERNEL_INC  := $(KERNEL_DIR)/gnumach/include
+KERNEL_INC  := $(KERNEL_DIR)/gnumach/build/include
 MM_SRC      := $(KERNEL_DIR)/mm
 IPC_SRC     := $(KERNEL_DIR)/ipc
 TASK_SRC    := $(KERNEL_DIR)/task
@@ -29,7 +29,7 @@ OUTPUT_BIN  := $(BUILD_DIR)/trini-kernel.bin
 
 # ── Toolchain (cross-compiler or native) ───────────────────────────────
 CC          ?= gcc
-AS          ?= nasm
+AS          ?= as
 LD          ?= ld
 OBJCOPY     ?= objcopy
 OBJDUMP     ?= objdump
@@ -45,16 +45,18 @@ CFLAGS      := -std=c11 -Wall -Wextra -Werror=return-type \
                -O2 -m64 -mcmodel=kernel \
                -fno-exceptions -fno-strict-aliasing
 
-# Assembler flags (NASM for x86_64)
-ASFLAGS     := -f elf64
+# Assembler flags (GAS)
+AS32FLAGS   := --32
+AS64FLAGS   := --64
 
-# Linker flags
+# Linker flags: produce flat binary directly via --oformat=binary
 LDFLAGS     := -T $(SRC_DIR)/kernel.ld \
                -N -e _start \
                --oformat=binary
 
 # ── Source files ───────────────────────────────────────────────────────
-ASM_SRCS    := $(wildcard $(SRC_DIR)/*.asm)
+ASM32_SRCS  := $(SRC_DIR)/boot_entry32.asm
+ASM64_SRCS  := $(SRC_DIR)/enter64.asm
 C_SRCS      := $(wildcard $(SRC_DIR)/*.c) \
                $(wildcard $(KERNEL_SRC)/*.c) \
                $(wildcard $(MM_SRC)/*.c) \
@@ -65,10 +67,13 @@ C_SRCS      := $(wildcard $(SRC_DIR)/*.c) \
                $(wildcard $(TEST_SRC)/*.c)
 
 # ── Object files ───────────────────────────────────────────────────────
-ASM_OBJS    := $(patsubst $(SRC_DIR)/%.asm,$(BUILD_DIR)/%.o,$(ASM_SRCS))
+ASM32_OBJS  := $(patsubst $(SRC_DIR)/%.asm,$(BUILD_DIR)/%.o,$(ASM32_SRCS))
+ASM64_OBJS  := $(patsubst $(SRC_DIR)/%.asm,$(BUILD_DIR)/%.o,$(ASM64_SRCS))
 C_OBJS      := $(patsubst %.c,$(BUILD_DIR)/%.o,$(C_SRCS))
 
-ALL_OBJS    := $(ASM_OBJS) $(C_OBJS)
+# boot_entry32.o is 32-bit only; excluded from x86-64 kernel link.
+# It serves as the GRUB multiboot2 module header for QEMU boot.
+ALL_OBJS    := $(ASM64_OBJS) $(C_OBJS)
 
 # ── Phony targets ──────────────────────────────────────────────────────
 .PHONY: all clean help info
@@ -82,15 +87,19 @@ all: $(OUTPUT_BIN)
 # ── Link: produce flat binary for GRUB2 ────────────────────────────────
 $(OUTPUT_BIN): $(ALL_OBJS) $(SRC_DIR)/kernel.ld
 	@echo "[LINK] Linking kernel..."
-	$(LD) $(LDFLAGS) -o $(BUILD_DIR)/kernel.elf $(ALL_OBJS)
-	@echo "[OBJCOPY] Converting to flat binary..."
-	$(OBJCOPY) -O binary $(BUILD_DIR)/kernel.elf $(OUTPUT_BIN)
-	@rm -f $(BUILD_DIR)/kernel.elf
+	$(LD) $(LDFLAGS) -o $(OUTPUT_BIN) $(ALL_OBJS)
 
-# ── Assemble: NASM .asm -> .o ─────────────────────────────────────────
-$(BUILD_DIR)/%.o: $(SRC_DIR)/%.asm
-	@echo "[AS] $<"
-	$(AS) $(ASFLAGS) -o $@ $<
+# ── Assemble 32-bit: GAS --32 ─────────────────────────────────────────
+$(BUILD_DIR)/boot_entry32.o: $(SRC_DIR)/boot_entry32.asm
+	@echo "[AS32] $<"
+	@mkdir -p $(dir $@)
+	$(AS) $(AS32FLAGS) -o $@ $<
+
+# ── Assemble 64-bit: GAS --64 ─────────────────────────────────────────
+$(BUILD_DIR)/enter64.o: $(SRC_DIR)/enter64.asm
+	@echo "[AS64] $<"
+	@mkdir -p $(dir $@)
+	$(AS) $(AS64FLAGS) -o $@ $<
 
 # ── Compile: GCC .c -> .o ─────────────────────────────────────────────
 $(BUILD_DIR)/%.o: %.c

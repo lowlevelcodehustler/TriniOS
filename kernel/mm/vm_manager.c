@@ -252,9 +252,10 @@ kern_return_t vm_create_stack(vm_space_t *space,
  * ============================================================================ */
 
 kern_return_t vm_pin_pages(vm_space_t *space,
-                           vm_offset_t address,
-                           vm_size_t size)
+                            vm_offset_t address,
+                            vm_size_t size)
 {
+    (void)size; /* Will be used when full paging support is wired to Mach */
     vm_region_t *region = vm_find_region(space, address);
     if (!region) {
         return KERN_INVALID_ADDRESS;
@@ -269,9 +270,10 @@ kern_return_t vm_pin_pages(vm_space_t *space,
  * ============================================================================ */
 
 kern_return_t vm_unpin_pages(vm_space_t *space,
-                             vm_offset_t address,
-                             vm_size_t size)
+                              vm_offset_t address,
+                              vm_size_t size)
 {
+    (void)size; /* Will be used when full paging support is wired to Mach */
     vm_region_t *region = vm_find_region(space, address);
     if (!region) {
         return KERN_INVALID_ADDRESS;
@@ -286,9 +288,10 @@ kern_return_t vm_unpin_pages(vm_space_t *space,
  * ============================================================================ */
 
 kern_return_t vm_mark_gpu_accessible(vm_space_t *space,
-                                     vm_offset_t address,
-                                     vm_size_t size)
+                                      vm_offset_t address,
+                                      vm_size_t size)
 {
+    (void)size; /* Will be used when full paging support is wired to Mach */
     vm_region_t *region = vm_find_region(space, address);
     if (!region) {
         return KERN_INVALID_ADDRESS;

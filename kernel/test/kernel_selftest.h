@@ -18,6 +18,19 @@
 
 #include <stdint.h>
 #include <stdbool.h>
+#include <stddef.h>
+
+/* Freestanding memcpy replacement — avoid system string.h with -nostdlib */
+#define TRINI_MEMCPY(dst, src, n) do {                              \
+    uint8_t *_dst = (uint8_t *)(dst);                               \
+    const uint8_t *_src = (const uint8_t *)(src);                   \
+    size_t _n = (n);                                                \
+    for (size_t _i = 0; _i < _n; _i++) {                            \
+        _dst[_i] = _src[_i];                                        \
+    }                                                               \
+} while (0)
+
+/* Use TRINI_MEMCPY directly in macros */
 
 /* ---------- test result tracking ---------- */
 
@@ -40,9 +53,9 @@ extern int               g_selftest_failed;
 #define SELFTEST_PASS(subsystem, name) do {        \
     if (g_selftest_count < MAX_SELFTESTS) {         \
         selftest_result_t *r = &g_selftest_results[g_selftest_count]; \
-        memcpy(r->subsystem, subsystem, 31);        \
+        TRINI_MEMCPY(r->subsystem, subsystem, 31);  \
         r->subsystem[31] = '\0';                    \
-        memcpy(r->name, name, 63);                  \
+        TRINI_MEMCPY(r->name, name, 63);            \
         r->name[63] = '\0';                         \
         r->passed = true;                           \
         g_selftest_count++;                         \
@@ -55,9 +68,9 @@ extern int               g_selftest_failed;
 #define SELFTEST_FAIL(subsystem, name, detail) do { \
     if (g_selftest_count < MAX_SELFTESTS) {         \
         selftest_result_t *r = &g_selftest_results[g_selftest_count]; \
-        memcpy(r->subsystem, subsystem, 31);        \
+        TRINI_MEMCPY(r->subsystem, subsystem, 31);  \
         r->subsystem[31] = '\0';                    \
-        memcpy(r->name, name, 63);                  \
+        TRINI_MEMCPY(r->name, name, 63);            \
         r->name[63] = '\0';                         \
         r->passed = false;                          \
         g_selftest_count++;                         \

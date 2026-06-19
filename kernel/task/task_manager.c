@@ -2,6 +2,7 @@
  * TriniOS - Task & Thread Management Implementation
  *
  * Wraps Mach task/thread primitives for process lifecycle management.
+ * Stub implementations for freestanding builds (no real Mach kernel yet).
  */
 
 #include "task_manager.h"
@@ -113,7 +114,6 @@ void task_free_pid(int pid)
 
 kern_return_t task_create(const task_attr_t *attr, task_desc_t **task_out)
 {
-    kern_return_t kr;
     task_desc_t *desc = NULL;
     task_t new_task;
 
@@ -132,33 +132,22 @@ kern_return_t task_create(const task_attr_t *attr, task_desc_t **task_out)
         return KERN_RESOURCE_SHORTAGE;
     }
 
-    /* Create Mach task */
-    if (attr->parent != TASK_NULL) {
-        kr = task_create(attr->parent,
-                         TASK_SCHED_DEFAULT,
-                         &new_task);
-    } else {
-        kr = task_create(mach_task_self(),
-                         TASK_SCHED_DEFAULT,
-                         &new_task);
-    }
-
-    if (kr != KERN_SUCCESS) {
-        free(desc);
-        return kr;
-    }
+    /* Create Mach task (stub: use mach_task_self for now)
+     * In a real implementation, this would call task_create() RPC to the kernel. */
+    new_task = mach_task_self();
 
     /* Fill in descriptor */
     desc->task = new_task;
     desc->state = TASK_STATE_RUNNING;
     desc->pid = task_alloc_pid();
-    desc->ppid = TASK_NULL;
+    desc->ppid = 0;
     desc->pgid = desc->pid;  /* Initially own process group */
     desc->sid = desc->pid;
     desc->exit_status = 0;
     desc->signal = 0;
     desc->entry_point = attr->entry_point;
     desc->stack_size = (attr->stack_size > 0) ? attr->stack_size : TASK_STACK_DEFAULT;
+    desc->stack_base = 0;
     desc->thread_count = 0;
     desc->threads = NULL;
     desc->parent_task = attr->parent;
@@ -180,26 +169,13 @@ kern_return_t task_create(const task_attr_t *attr, task_desc_t **task_out)
         desc->path[TASK_PATH_MAX - 1] = '\0';
     }
 
-    /* Set initial stack */
-    kr = vm_allocate(new_task,
-                     &desc->stack_base,
-                     desc->stack_size,
-                     VM_FLAGS_ANYWHERE);
-    if (kr != KERN_SUCCESS) {
-        task_destroy(desc);
-        return kr;
-    }
-
     /* Add to task table */
-    /* Find a free slot */
     uint32_t slot = 0;
     while (slot < MAX_TASKS && g_task_table[slot] != NULL) {
         slot++;
     }
 
     if (slot >= MAX_TASKS) {
-        vm_deallocate(new_task, desc->stack_base, desc->stack_size);
-        task_destroy(new_task);
         free(desc);
         return KERN_RESOURCE_SHORTAGE;
     }
@@ -247,12 +223,6 @@ kern_return_t task_destroy(task_desc_t *desc)
     desc->threads = NULL;
     desc->thread_count = 0;
 
-    /* Deallocate stack */
-    if (desc->stack_base != 0) {
-        vm_deallocate(desc->task, desc->stack_base, desc->stack_size);
-        desc->stack_base = 0;
-    }
-
     /* Free argv/envp */
     if (desc->argv) {
         free(desc->argv);
@@ -276,7 +246,7 @@ kern_return_t task_destroy(task_desc_t *desc)
     if (desc->parent_task != TASK_NULL) {
         task_desc_t *parent = task_get_by_mach_task(desc->parent_task);
         if (parent) {
-            thread_desc_t **cpp = &parent->children;
+            task_desc_t **cpp = &parent->children;
             while (*cpp) {
                 if (*cpp == desc) {
                     *cpp = desc->next;
@@ -289,12 +259,6 @@ kern_return_t task_destroy(task_desc_t *desc)
 
     /* Free PID */
     task_free_pid(desc->pid);
-
-    /* Destroy Mach task */
-    if (desc->task != TASK_NULL) {
-        task_deallocate(desc->task);
-        desc->task = TASK_NULL;
-    }
 
     /* Clear init pointer */
     if (g_init_task == desc) {
@@ -318,8 +282,8 @@ kern_return_t task_terminate(task_desc_t *desc, int exit_status)
     desc->exit_status = exit_status;
     desc->state = TASK_STATE_ZOMBIE;
 
-    /* Terminate the Mach task */
-    return task_suspend(desc->task);
+    /* Stub: in a real implementation, this would call task_suspend() RPC */
+    return KERN_SUCCESS;
 }
 
 kern_return_t task_wait(task_desc_t *desc, int *exit_status)
@@ -337,7 +301,7 @@ kern_return_t task_wait(task_desc_t *desc, int *exit_status)
         return KERN_SUCCESS;
     }
 
-    return KERN_NOT_WAITING;
+    return KERN_FAILURE;
 }
 
 /* ============================================================================
@@ -391,7 +355,7 @@ task_desc_t *task_get_by_name(const char *name)
  * Task Information
  * ============================================================================ */
 
-kern_return_t task_get_info(task_desc_t *desc, task_info_t *info)
+kern_return_t task_get_info(task_desc_t *desc, trini_task_info_t *info)
 {
     if (!desc || !info) {
         return KERN_INVALID_ARGUMENT;
@@ -400,28 +364,19 @@ kern_return_t task_get_info(task_desc_t *desc, task_info_t *info)
     info->pid = desc->pid;
     info->ppid = desc->ppid;
     strncpy(info->name, desc->name, TASK_NAME_MAX_LEN);
+    info->name[TASK_NAME_MAX_LEN - 1] = '\0';
     strncpy(info->path, desc->path, TASK_PATH_MAX);
+    info->path[TASK_PATH_MAX - 1] = '\0';
     info->state = desc->state;
     info->thread_count = desc->thread_count;
     info->vm_size = 0;
     info->user_time = 0;
     info->system_time = 0;
 
-    /* Try to get VM info */
-    task_info_data_t task_info;
-    mach_msg_type_size_t count = TASK_INFO_COUNT;
-    kern_return_t kr = task_info(desc->task, TASK_BASIC_INFO,
-                                 (task_info_t *)&task_info, &count);
-    if (kr == KERN_SUCCESS) {
-        info->vm_size = task_info.virtual_size;
-        info->user_time = task_info.user_time;
-        info->system_time = task_info.system_time;
-    }
-
     return KERN_SUCCESS;
 }
 
-uint32_t task_list_all(task_desc_t *list, uint32_t max_count)
+uint32_t task_list_all(task_desc_t **list, uint32_t max_count)
 {
     if (!g_initialized || !list || max_count == 0) {
         return 0;
@@ -430,7 +385,7 @@ uint32_t task_list_all(task_desc_t *list, uint32_t max_count)
     uint32_t count = 0;
     for (uint32_t i = 0; i < MAX_TASKS && count < max_count; i++) {
         if (g_task_table[i]) {
-            memcpy(&list[count], g_task_table[i], sizeof(task_desc_t));
+            list[count] = g_task_table[i];
             count++;
         }
     }
@@ -448,7 +403,6 @@ kern_return_t thread_create(task_desc_t *task_desc,
                             vm_size_t stack_size,
                             thread_desc_t **thread_out)
 {
-    kern_return_t kr;
     thread_desc_t *desc = NULL;
 
     if (!task_desc || !thread_out) {
@@ -465,12 +419,9 @@ kern_return_t thread_create(task_desc_t *task_desc,
         return KERN_RESOURCE_SHORTAGE;
     }
 
-    /* Create Mach thread */
-    kr = thread_create(task_desc->task, &desc->thread);
-    if (kr != KERN_SUCCESS) {
-        free(desc);
-        return kr;
-    }
+    /* Create Mach thread (stub: use mach_task_self for now)
+     * In a real implementation, this would call thread_create() RPC. */
+    desc->thread = mach_task_self();
 
     /* Fill in descriptor */
     if (name) {
@@ -485,38 +436,15 @@ kern_return_t thread_create(task_desc_t *task_desc,
     desc->entry_point = entry_point;
     desc->arg = arg;
     desc->stack_size = stack_size;
+    desc->stack_base = 0;
     desc->next = task_desc->threads;
 
     /* Link into task's thread list */
     task_desc->threads = desc;
     task_desc->thread_count++;
 
-    /* Set thread entry point and start */
-    x86_thread_state_t state;
-    memset(&state, 0, sizeof(state));
-    state.__eip = (uint64_t)entry_point;
-    state.__esp = (uint64_t)(desc->stack_base + stack_size);
-    state.__eax = (uint64_t)arg;
-
-    kr = thread_set_state(desc->thread,
-                          x86_THREAD_STATE,
-                          (thread_state_t)&state,
-                          x86_THREAD_STATE_COUNT);
-
-    if (kr != KERN_SUCCESS) {
-        thread_destroy(desc);
-        free(desc);
-        return kr;
-    }
-
-    /* Resume the thread */
-    kr = thread_resume(desc->thread);
-    if (kr == KERN_SUCCESS) {
-        desc->state = THREAD_STATE_RUNNING;
-    }
-
     *thread_out = desc;
-    return kr;
+    return KERN_SUCCESS;
 }
 
 kern_return_t thread_destroy(thread_desc_t *desc)
@@ -525,13 +453,9 @@ kern_return_t thread_destroy(thread_desc_t *desc)
         return KERN_INVALID_ARGUMENT;
     }
 
-    /* Deallocate Mach thread */
-    if (desc->thread != THREAD_NULL) {
-        thread_deallocate(desc->thread);
-        desc->thread = THREAD_NULL;
-    }
-
     desc->state = THREAD_STATE_DEAD;
+    desc->thread = THREAD_NULL;
+
     return KERN_SUCCESS;
 }
 
@@ -561,25 +485,12 @@ kern_return_t thread_set_priority(thread_desc_t *desc, int priority)
         return KERN_INVALID_ARGUMENT;
     }
 
-    /* Mach thread policy */
-    thread_time_constraint_info_t constraint;
-    constraint.period = 1000000;  /* 1ms period */
-    constraint.computation = 500000; /* 0.5ms computation */
-    constraint.constraint = 900000;  /* 0.9ms deadline */
-    constraint.preemptible = FALSE;
-
-    kern_return_t kr = thread_policy_set(desc->thread,
-                                         THREAD_TIME_CONSTRAINT_POLICY,
-                                         (thread_policy_t)&constraint,
-                                         THREAD_TIME_CONSTRAINT_POLICY_COUNT);
-
-    if (kr == KERN_SUCCESS) {
-        desc->priority = priority;
-    }
-    return kr;
+    /* Stub: in a real implementation, this would call thread_policy_set() RPC */
+    desc->priority = priority;
+    return KERN_SUCCESS;
 }
 
-thread_state_t thread_get_state(thread_desc_t *desc)
+trini_thread_state_t thread_get_state(thread_desc_t *desc)
 {
     if (!desc) {
         return THREAD_STATE_DEAD;
@@ -612,26 +523,10 @@ kern_return_t thread_set_policy(thread_desc_t *desc, int policy, int priority)
         return KERN_INVALID_ARGUMENT;
     }
 
-    /* Map policy to Mach thread policy */
-    switch (policy) {
-        case 0:  /* Round-robin (default) */
-            /* Use default Mach scheduling */
-            return thread_set_priority(desc, priority);
-
-        case 1:  /* Fixed priority */
-            {
-                thread_precedence_info_t precedence;
-                precedence.importance = priority;
-                kern_return_t kr = thread_policy_set(desc->thread,
-                                                     THREAD_PRECEDENCE_POLICY,
-                                                     (thread_policy_t)&precedence,
-                                                     THREAD_PRECEDENCE_POLICY_COUNT);
-                return kr;
-            }
-
-        default:
-            return KERN_INVALID_ARGUMENT;
-    }
+    /* Stub: in a real implementation, this would call thread_policy_set() RPC */
+    (void)policy;
+    desc->priority = priority;
+    return KERN_SUCCESS;
 }
 
 /* ============================================================================
@@ -639,20 +534,22 @@ kern_return_t thread_set_policy(thread_desc_t *desc, int policy, int priority)
  * ============================================================================ */
 
 kern_return_t task_install_exception_handler(task_desc_t *desc,
-                                             exception_mask_t mask,
+                                             uint32_t mask,
                                              mach_port_t handler,
-                                             exception_behavior_t behavior,
-                                             thread_state_flavor_t flavor)
+                                             uint32_t behavior,
+                                             uint32_t flavor)
 {
     if (!desc) {
         return KERN_INVALID_ARGUMENT;
     }
 
-    return task_set_exception_ports(desc->task,
-                                    mask,
-                                    handler,
-                                    behavior,
-                                    flavor);
+    /* Stub: in a real implementation, this would call
+     * task_set_exception_ports() RPC to the kernel. */
+    (void)mask;
+    (void)handler;
+    (void)behavior;
+    (void)flavor;
+    return KERN_SUCCESS;
 }
 
 /* ============================================================================

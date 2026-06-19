@@ -9,7 +9,6 @@
 #define GPU_MEM_H
 
 #include <mach/mach.h>
-#include <mach/vm_map.h>
 #include <stdint.h>
 #include <stdbool.h>
 

@@ -16,9 +16,7 @@
 #include "initrd_loader.h"
 #include "vm_manager.h"
 
-#include <mach/kern_return.h>
-#include <mach/vm.h>
-#include <mach/vm_map.h>
+#include <mach/mach.h>
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -365,16 +363,6 @@ kern_return_t initrd_mount(void)
     }
 
     printf("initrd: Mounting as rootfs at %s\n", INITRD_MOUNT);
-
-    /*
-     * Register with VM manager as a RAM-backed filesystem.
-     * The vm_manager provides the backing store for the tmpfs.
-     */
-    vm_range_t rootfs_range;
-    rootfs_range.start = 0;
-    rootfs_range.end   = 0;  /* Dynamic sizing */
-    rootfs_range.type  = VM_REGION_TYPE_DATA;
-    rootfs_range.flags = VM_FLAG_READ | VM_FLAG_WRITE;
 
     /*
      * TODO: Integrate with VFS layer when available.

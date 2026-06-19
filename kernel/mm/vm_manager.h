@@ -10,7 +10,6 @@
 #define VM_MANAGER_H
 
 #include <mach/mach.h>
-#include <mach/vm_map.h>
 #include <stdint.h>
 #include <stdbool.h>
 
@@ -61,7 +60,7 @@ typedef struct vm_region {
 
 typedef struct {
     task_t            task;
-    vm_map_t          vm_map;
+    task_t            vm_map;               /* Mach task port for VM operations (freestanding: vm_map_t is kernel-internal) */
     vm_region_t      *regions;              /* Linked list of mapped regions */
     vm_offset_t       break_;               /* Current program break (heap top) */
     vm_offset_t       stack_base;           /* Initial stack location */
