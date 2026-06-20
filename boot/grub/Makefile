@@ -55,7 +55,6 @@ LDFLAGS     := -T $(SRC_DIR)/kernel.ld \
                --oformat=binary
 
 # ── Source files ───────────────────────────────────────────────────────
-ASM32_SRCS  := $(SRC_DIR)/boot_entry32.asm
 ASM64_SRCS  := $(SRC_DIR)/enter64.asm
 C_SRCS      := $(wildcard $(SRC_DIR)/*.c) \
                $(wildcard $(KERNEL_SRC)/*.c) \
@@ -67,12 +66,10 @@ C_SRCS      := $(wildcard $(SRC_DIR)/*.c) \
                $(wildcard $(TEST_SRC)/*.c)
 
 # ── Object files ───────────────────────────────────────────────────────
-ASM32_OBJS  := $(patsubst $(SRC_DIR)/%.asm,$(BUILD_DIR)/%.o,$(ASM32_SRCS))
 ASM64_OBJS  := $(patsubst $(SRC_DIR)/%.asm,$(BUILD_DIR)/%.o,$(ASM64_SRCS))
 C_OBJS      := $(patsubst %.c,$(BUILD_DIR)/%.o,$(C_SRCS))
 
-# boot_entry32.o is 32-bit only; excluded from x86-64 kernel link.
-# It serves as the GRUB multiboot2 module header for QEMU boot.
+# All object files (enter64.o + kernel C sources)
 ALL_OBJS    := $(ASM64_OBJS) $(C_OBJS)
 
 # ── Phony targets ──────────────────────────────────────────────────────
@@ -88,12 +85,6 @@ all: $(OUTPUT_BIN)
 $(OUTPUT_BIN): $(ALL_OBJS) $(SRC_DIR)/kernel.ld
 	@echo "[LINK] Linking kernel..."
 	$(LD) $(LDFLAGS) -o $(OUTPUT_BIN) $(ALL_OBJS)
-
-# ── Assemble 32-bit: GAS --32 ─────────────────────────────────────────
-$(BUILD_DIR)/boot_entry32.o: $(SRC_DIR)/boot_entry32.asm
-	@echo "[AS32] $<"
-	@mkdir -p $(dir $@)
-	$(AS) $(AS32FLAGS) -o $@ $<
 
 # ── Assemble 64-bit: GAS --64 ─────────────────────────────────────────
 $(BUILD_DIR)/enter64.o: $(SRC_DIR)/enter64.asm

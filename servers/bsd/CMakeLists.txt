@@ -9,7 +9,8 @@ set(CMAKE_C_STANDARD_REQUIRED ON)
 # ============================================================================
 
 # Mach headers location (from GNU Mach build)
-set(MACH_INCLUDE_DIR "${CMAKE_SOURCE_DIR}/kernel/gnumach/build/include")
+# CMAKE_SOURCE_DIR points to this project dir, so go up two levels
+set(MACH_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../kernel/gnumach/build/include")
 
 # Include directories
 include_directories(
@@ -27,6 +28,9 @@ set(BSD_SERVER_SOURCES
     src/file.c
     src/pipe.c
     src/signal.c
+    src/elf.c
+    src/initrd_lookup.c
+    src/mach_ipc_real.c
 )
 
 # ============================================================================

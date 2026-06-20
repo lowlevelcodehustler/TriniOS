@@ -12,26 +12,39 @@
 
     .text
 
-MULTIBOOT2_HEADER_MAGIC = 0x36722891
-MULTIBOOT2_ARCH         = 0
-MULTIBOOT2_CHECKSUM     = -(MULTIBOOT2_HEADER_MAGIC + MULTIBOOT2_ARCH)
+/* Official GRUB Multiboot2 magic per the spec (0xe8525006) */
+MULTIBOOT2_HEADER_MAGIC = 0xE8525006
 
-/* ── Multiboot2 Header (MUST be at offset 0 of the binary) ─────────── */
+/* ── Multiboot2 Header (MUST be at offset 0 of the binary) ───────────
+ *
+ * Per GRUB Multiboot2 spec:
+ *   [0..3]    magic       = 0xE8525006 (official multiboot2 magic)
+ *   [4..7]    architecture = 0 (i386 protected mode)
+ *   [8..11]   header_len  = total size of header including all tags
+ *   [12..15]  checksum    = -(magic + arch + hdr_len) mod 2^32
+ *
+ * After the base 16-byte header, at least a terminator tag must follow:
+ *   [16..17]  type        = 0 (TERMINAL_TAG)
+ *   [18..19]  flags       = 0
+ *   [20..23]  size        = 8 (minimum for terminator: 2+2+4 bytes)
+ *
+ * Total header length = 16 + 8 = 24 bytes
+ */
     .globl _start
 _start:
-    /* magic */
-    .long   MULTIBOOT2_HEADER_MAGIC
-    /* architecture */
-    .long   MULTIBOOT2_ARCH
-    /* header length (28 bytes = 16 base + 4+4+8 terminator) */
-    .long   28
-    /* checksum (-magic -arch) */
-    .long   MULTIBOOT2_CHECKSUM
+    /* magic — must be 0xE8525006 for GRUB multiboot2 compliance */
+    .long   MULTIBOOT2_HEADER_MAGIC       /* 0xE8525006 — Multiboot2 magic */
+    /* architecture (0 = i386 protected mode) */
+    .long   0                             /* architecture */
+    /* header length: base(16) + terminator_tag(8) = 24 */
+    .long   24                            /* total_header_size */
+    /* checksum = -(magic + arch + hdr_len) mod 2^32 */
+    .long   -(MULTIBOOT2_HEADER_MAGIC + 0 + 24)
 
 /* Terminator tag: type=0, flags=0, size=8 */
-    .short  0              /* type: end */
-    .short  0              /* flags */
-    .long   8              /* size */
+    .short  0                             /* type: end (TERMINAL_TAG) */
+    .short  0                             /* flags */
+    .long   8                             /* size */
 
 /* ── Entry Point (GRUB jumps here after finding multiboot header) ──── */
     .code32

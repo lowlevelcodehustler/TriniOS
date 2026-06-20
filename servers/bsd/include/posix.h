@@ -9,6 +9,7 @@
 #define POSIX_H
 
 #include <mach/mach.h>
+#include <stdarg.h>
 
 /* ============================================================================
  * POSIX File Descriptor Flags
@@ -130,6 +131,9 @@
 #define POSIX_ELOOP           40
 #define POSIX_ENAMETOOLONG    36
 #define POSIX_ENOTEMPTY       39
+#define POSIX_ENOSYS          38
+#define POSIX_ENFILE          24
+#define POSIX_EMFILE          24
 
 /* ============================================================================
  * waitpid Status Macros
@@ -171,6 +175,11 @@ int  posix_fcntl(int fd, int cmd, ...);
 
 /* Signal handling */
 void (*posix_signal(int sig, void (*handler)(int)))(int);
+
+/* Signal handler return value on error */
+#ifndef SIG_ERR
+#define SIG_ERR ((void (*)(int))(-1))
+#endif
 
 /* ============================================================================
  * Task-local storage key for BSD server port

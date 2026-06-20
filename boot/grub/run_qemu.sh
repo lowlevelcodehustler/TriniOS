@@ -8,8 +8,9 @@
 #
 # Options:
 #   -d    Enable debug mode (serial console + gdb stub)
-#   -n    No initrd (kernel only)
+#   -n    No initrd (kernel only, no ISO rebuild)
 #   -s    Stop at startup, wait for GDB connection
+#   -b    Build ISO before launching
 #   -h    Show help
 #
 # ──────────────────────────────────────────────────────────────────────────
@@ -21,8 +22,8 @@ ROOT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 # ── Defaults ────────────────────────────────────────────────────────────
 DEBUG=0
-NO_INITRD=0
 GDB_STOP=0
+BUILD_ISO=0
 QEMU_ARCH="x86_64"
 QEMU_MACHINE="q35"
 QEMU_CPU="max"
@@ -31,6 +32,7 @@ QEMU_SMP="1"
 
 KERNEL_BIN="$ROOT_DIR/build/kernel/trini-kernel.bin"
 INITRD_IMG="$ROOT_DIR/boot/initrd/output/initrd.img"
+ISO_FILE="$ROOT_DIR/build/kernel/trini-os.iso"
 GRUB_CFG="$SCRIPT_DIR/grub.cfg"
 
 # ── QEMU binary detection ──────────────────────────────────────────────
@@ -42,19 +44,25 @@ fi
 
 # ── Parse arguments ────────────────────────────────────────────────────
 usage() {
-    echo "Usage: $0 [-d] [-n] [-s] [-h]"
+    echo "Usage: $0 [-d] [-n] [-s] [-b] [-f <logfile>] [-h]"
     echo "  -d    Enable debug (serial + gdb)"
-    echo "  -n    No initrd (kernel only)"
+    echo "  -n    No initrd (kernel only, no ISO rebuild)"
     echo "  -s    Stop at startup (wait for GDB)"
+    echo "  -b    Build ISO before launching"
+    echo "  -f    Capture serial output to file instead of curses display"
     echo "  -h    Show this help"
     exit 0
 }
 
-while getopts "dnsh" opt; do
+SERIAL_LOG=""
+
+while getopts "dnshbf:" opt; do
     case "$opt" in
         d) DEBUG=1 ;;
-        n) NO_INITRD=1 ;;
+        n) BUILD_ISO=0 ;;   # Don't build ISO (use existing artifacts with -kernel fallback)
         s) GDB_STOP=1 ;;
+        b) BUILD_ISO=1 ;;
+        f) SERIAL_LOG="$OPTARG" ;;
         h) usage ;;
         *) usage ;;
     esac
@@ -67,9 +75,62 @@ if [ ! -f "$KERNEL_BIN" ]; then
     exit 1
 fi
 
-if [ "$NO_INITRD" -eq 0 ] && [ ! -f "$INITRD_IMG" ]; then
-    echo "[ERROR] Initrd not found: $INITRD_IMG"
-    echo "       Run 'make -C boot/initrd all' first."
+# ── Build ISO if needed ────────────────────────────────────────────────
+if [ "$BUILD_ISO" -eq 1 ] || [ ! -f "$ISO_FILE" ]; then
+    echo "[*] Building GRUB2 ISO..."
+
+    # Ensure kernel and initrd are in place for ISO build
+    if [ ! -f "$INITRD_IMG" ]; then
+        echo "[ERROR] Initrd not found: $INITRD_IMG"
+        echo "       Run 'make -C boot/initrd all' first."
+        exit 1
+    fi
+
+    # Create a clean build directory for the ISO with correct file layout:
+    #   /boot/grub/grub.cfg       — GRUB config
+    #   /boot/trini-kernel.bin    — kernel binary (multiboot2)
+    #   /boot/initrd.img          — initrd CPIO archive
+    BUILD_DIR="$SCRIPT_DIR/build_iso"
+    rm -rf "$BUILD_DIR"
+    mkdir -p "$BUILD_DIR/boot/grub"
+
+    # Copy grub.cfg into build dir at correct path
+    cp "$GRUB_CFG" "$BUILD_DIR/boot/grub/grub.cfg"
+
+    # Copy kernel and initrd to /boot/ in the ISO
+    cp "$KERNEL_BIN" "$BUILD_DIR/boot/trini-kernel.bin"
+    cp "$INITRD_IMG" "$BUILD_DIR/boot/initrd.img"
+
+    # Copy GRUB modules from iso/boot/grub (i386-pc, fonts, etc.)
+    if [ -d "$SCRIPT_DIR/iso/boot/grub" ]; then
+        cp -r "$SCRIPT_DIR/iso/boot/grub"/* "$BUILD_DIR/boot/grub/"
+    fi
+
+    # Build ISO using grub-mkrescue (hybrid EFI+BIOS) from clean build dir
+    if command -v grub-mkrescue &>/dev/null; then
+        cd "$BUILD_DIR"
+        grub-mkrescue -o "$ISO_FILE" . 2>&1 | tail -5
+        echo "[*] ISO built: $ISO_FILE ($(du -h "$ISO_FILE" | cut -f1))"
+    else
+        # Fallback: use mkisofs with eltorito boot image from build dir
+        cd "$BUILD_DIR"
+        mkisofs -o "$ISO_FILE" \
+            -V "TRINIOS" \
+            -no-emul-boot \
+            -boot-load-size 4 \
+            -boot-info-table \
+            -eltorito-boot boot/grub/i386-pc/core.img \
+            -eltorito-platform bios \
+            . 2>&1
+        echo "[*] ISO built (mkisofs): $ISO_FILE ($(du -h "$ISO_FILE" | cut -f1))"
+    fi
+
+    # Cleanup build dir
+    rm -rf "$BUILD_DIR"
+fi
+
+if [ ! -f "$ISO_FILE" ]; then
+    echo "[ERROR] ISO not found: $ISO_FILE"
     exit 1
 fi
 
@@ -82,24 +143,33 @@ QEMU_ARGS=(
     -smp "$QEMU_SMP"
 )
 
-# Use GRUB2 kernel directly via -kernel (simpler than building ISO)
+# Boot from CD-ROM (ISO image with GRUB2)
 QEMU_ARGS+=(
-    -kernel "$KERNEL_BIN"
+    -boot d
+    -cdrom "$ISO_FILE"
 )
 
-# Add initrd if requested and available
-if [ "$NO_INITRD" -eq 0 ] && [ -f "$INITRD_IMG" ]; then
+echo "[*] Booting from ISO: $ISO_FILE"
+
+# Display configuration
+if [ -n "$SERIAL_LOG" ]; then
+    # Headless mode: capture VGA output to file via text-mode emulation
+    # Use -display none with -serial null and let the kernel's VGA buffer
+    # be captured via QEMU's text console logging.
     QEMU_ARGS+=(
-        -initrd "$INITRD_IMG"
+        -display none
+        -serial null
     )
-    echo "[*] Loading initrd: $INITRD_IMG"
+    echo "[*] Headless mode — serial output not available (GRUB2 claims COM1)"
+    echo "    To see boot messages, run interactively without -f:"
+    echo "      ./run_qemu.sh"
+else
+    # Interactive curses display with VGA text mode
+    QEMU_ARGS+=(
+        -display curses
+        -serial null
+    )
 fi
-
-# Serial console
-QEMU_ARGS+=(
-    -serial stdio
-    -display curses
-)
 
 # Debug options
 if [ "$DEBUG" -eq 1 ]; then
@@ -126,8 +196,7 @@ echo "║  Machine: $QEMU_MACHINE"
 echo "║  CPU:     $QEMU_CPU"
 echo "║  Memory:  $QEMU_MEM"
 echo "║  SMP:     $QEMU_SMP"
-echo "║  Kernel:  $KERNEL_BIN"
-[ "$NO_INITRD" -eq 0 ] && echo "║  Initrd:  $INITRD_IMG" || echo "║  Initrd:  (disabled)"
+echo "║  ISO:     $ISO_FILE"
 echo "╚══════════════════════════════════════════════════════════╝"
 echo ""
 

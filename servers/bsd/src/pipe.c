@@ -1,9 +1,7 @@
 /*
  * TriniOS BSD Compatibility Server - Pipe Implementation
  *
- * Implements pipe() using Mach message channels.
- * Each pipe is a ring buffer with associated Mach ports for
- * synchronization between reader and writer.
+ * Implements pipe() using ring buffers with Mach ports for synchronization.
  */
 
 #include "bsd_server.h"
@@ -11,10 +9,11 @@
 #include <string.h>
 
 /* ============================================================================
- * Global pipe table (declared in main.c)
- * extern pipe_buffer_t pipe_table[BSD_MAX_PIPES];
- * extern int pipe_count;
+ * External: pipe_table is defined in main.c
  * ============================================================================ */
+
+extern pipe_buffer_t pipe_table[BSD_MAX_PIPES];
+extern int pipe_count;
 
 /* ============================================================================
  * pipe() Implementation
@@ -23,24 +22,40 @@
  * 1. Allocate a pipe buffer from the pipe table
  * 2. Create two Mach ports (read and write ends)
  * 3. Allocate two file descriptors in the task's fd table
- * 4. Return fds[0] (read) and fds[1] (write)
+ * 4. Return fds[0] (read) and fds[1] (write) via reply struct
  * ============================================================================ */
 
-kern_return_t bsd_handle_pipe(task_context_t *ctx, int *fds)
+kern_return_t bsd_handle_pipe(task_context_t *ctx,
+                              bsd_pipe_request_t *req,
+                              bsd_pipe_reply_t *reply)
 {
     kern_return_t kr;
     int pipe_idx;
     pipe_buffer_t *pipe;
     int read_fd, write_fd;
 
-    if (!ctx || !fds) {
+    (void)req;
+
+    if (!ctx || !reply) {
+        reply->result = -1;
+        reply->error = POSIX_EINVAL;
         return POSIX_EINVAL;
     }
 
     /* Allocate a pipe buffer */
-    pipe_idx = bsd_alloc_pipe();
+    pipe_idx = -1;
+    for (int i = 0; i < BSD_MAX_PIPES; i++) {
+        if (pipe_table[i].read_port == MACH_PORT_NULL &&
+            pipe_table[i].write_port == MACH_PORT_NULL) {
+            pipe_idx = i;
+            break;
+        }
+    }
+
     if (pipe_idx < 0) {
-        return POSIX_ENFILE; /* Too many open files in system */
+        reply->result = -1;
+        reply->error = POSIX_ENFILE;
+        return POSIX_ENFILE;
     }
 
     pipe = &pipe_table[pipe_idx];
@@ -55,6 +70,8 @@ kern_return_t bsd_handle_pipe(task_context_t *ctx, int *fds)
     /* Create Mach ports for synchronization */
     kr = mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &pipe->read_port);
     if (kr != KERN_SUCCESS) {
+        reply->result = -1;
+        reply->error = kr;
         return kr;
     }
 
@@ -62,33 +79,59 @@ kern_return_t bsd_handle_pipe(task_context_t *ctx, int *fds)
     if (kr != KERN_SUCCESS) {
         mach_port_deallocate(mach_task_self(), pipe->read_port);
         pipe->read_port = MACH_PORT_NULL;
+        reply->result = -1;
+        reply->error = kr;
         return kr;
     }
 
     /* Insert send rights */
-    kr = mach_port_insert_right(mach_task_self(), pipe->read_port, pipe->read_port, MACH_MSG_TYPE_MAKE_SEND);
+    kr = mach_port_insert_right(mach_task_self(), pipe->read_port,
+                                pipe->read_port, MACH_MSG_TYPE_MAKE_SEND);
     if (kr != KERN_SUCCESS) {
-        bsd_close_pipe(pipe_idx);
+        mach_port_deallocate(mach_task_self(), pipe->write_port);
+        pipe->write_port = MACH_PORT_NULL;
+        mach_port_deallocate(mach_task_self(), pipe->read_port);
+        pipe->read_port = MACH_PORT_NULL;
+        reply->result = -1;
+        reply->error = kr;
         return kr;
     }
 
-    kr = mach_port_insert_right(mach_task_self(), pipe->write_port, pipe->write_port, MACH_MSG_TYPE_MAKE_SEND);
+    kr = mach_port_insert_right(mach_task_self(), pipe->write_port,
+                                pipe->write_port, MACH_MSG_TYPE_MAKE_SEND);
     if (kr != KERN_SUCCESS) {
-        bsd_close_pipe(pipe_idx);
+        mach_port_deallocate(mach_task_self(), pipe->write_port);
+        pipe->write_port = MACH_PORT_NULL;
+        mach_port_deallocate(mach_task_self(), pipe->read_port);
+        pipe->read_port = MACH_PORT_NULL;
+        reply->result = -1;
+        reply->error = kr;
         return kr;
     }
 
     /* Allocate file descriptors */
     read_fd = bsd_alloc_fd(ctx);
     if (read_fd < 0) {
-        bsd_close_pipe(pipe_idx);
+        mach_port_deallocate(mach_task_self(), pipe->write_port);
+        pipe->write_port = MACH_PORT_NULL;
+        mach_port_deallocate(mach_task_self(), pipe->read_port);
+        pipe->read_port = MACH_PORT_NULL;
+        memset(pipe, 0, sizeof(pipe_buffer_t));
+        reply->result = -1;
+        reply->error = POSIX_EMFILE;
         return POSIX_EMFILE;
     }
 
     write_fd = bsd_alloc_fd(ctx);
     if (write_fd < 0) {
         bsd_free_fd(ctx, read_fd);
-        bsd_close_pipe(pipe_idx);
+        mach_port_deallocate(mach_task_self(), pipe->write_port);
+        pipe->write_port = MACH_PORT_NULL;
+        mach_port_deallocate(mach_task_self(), pipe->read_port);
+        pipe->read_port = MACH_PORT_NULL;
+        memset(pipe, 0, sizeof(pipe_buffer_t));
+        reply->result = -1;
+        reply->error = POSIX_EMFILE;
         return POSIX_EMFILE;
     }
 
@@ -107,8 +150,10 @@ kern_return_t bsd_handle_pipe(task_context_t *ctx, int *fds)
     ctx->fds[write_fd].is_pipe = true;
 
     /* Return file descriptors */
-    fds[0] = read_fd;
-    fds[1] = write_fd;
+    reply->result = 0;
+    reply->error = 0;
+    reply->read_fd = read_fd;
+    reply->write_fd = write_fd;
 
     /* Increment pipe count */
     pipe_count++;
@@ -117,14 +162,15 @@ kern_return_t bsd_handle_pipe(task_context_t *ctx, int *fds)
 }
 
 /* ============================================================================
- * Pipe Close (internal)
- *
- * Cleans up a pipe buffer and its Mach ports.
- * Called when both ends are closed or on error.
+ * Internal: Close a pipe buffer and its Mach ports
  * ============================================================================ */
 
 static void bsd_close_pipe(int pipe_idx)
 {
+    if (pipe_idx < 0 || pipe_idx >= BSD_MAX_PIPES) {
+        return;
+    }
+
     pipe_buffer_t *pipe = &pipe_table[pipe_idx];
 
     if (pipe->read_port != MACH_PORT_NULL) {
@@ -138,74 +184,66 @@ static void bsd_close_pipe(int pipe_idx)
     }
 
     memset(pipe, 0, sizeof(pipe_buffer_t));
-    pipe_count--;
-}
 
-/* ============================================================================
- * Pipe Write End Closed
- *
- * Called when the write end of a pipe is closed.
- * Readers should get EOF (0 bytes returned).
- * ============================================================================ */
-
-void bsd_pipe_close_write(int pipe_idx)
-{
-    pipe_buffer_t *pipe = &pipe_table[pipe_idx];
-    pipe->closed_write = true;
-
-    /* If there's data remaining, readers can still drain it */
-    /* If buffer is empty, readers get EOF immediately */
-    if (pipe->head == pipe->tail) {
-        /* Notify waiting readers of EOF */
-        /* TODO: send EOF message to read_port */
+    if (pipe_count > 0) {
+        pipe_count--;
     }
 }
 
 /* ============================================================================
- * Pipe Read End Closed
- *
- * Called when the read end of a pipe is closed.
- * Writers should get SIGPIPE.
+ * Internal: Close write end of a pipe (for close() handling)
  * ============================================================================ */
 
-void bsd_pipe_close_read(int pipe_idx)
+void bsd_pipe_close_write(task_context_t *ctx, int fd)
 {
-    pipe_buffer_t *pipe = &pipe_table[pipe_idx];
-    pipe->closed_read = true;
+    if (!ctx || fd < 0 || fd >= BSD_MAX_FILE_DESCRIPTORS) {
+        return;
+    }
 
-    /* Writers to a closed pipe should receive SIGPIPE */
-    /* TODO: send SIGPIPE to any task holding the write fd */
+    fd_entry_t *entry = &ctx->fds[fd];
+    if (!entry->is_pipe || entry->port == MACH_PORT_NULL) {
+        return;
+    }
 
-    /* If both ends closed, clean up */
-    if (pipe->closed_write && pipe->closed_read) {
-        bsd_close_pipe(pipe_idx);
+    /* Find the pipe buffer by matching write_port */
+    for (int i = 0; i < BSD_MAX_PIPES; i++) {
+        if (pipe_table[i].write_port == entry->port) {
+            pipe_table[i].closed_write = true;
+
+            /* If both ends closed, clean up */
+            if (pipe_table[i].closed_read) {
+                bsd_close_pipe(i);
+            }
+            break;
+        }
     }
 }
 
 /* ============================================================================
- * Pipe Data Available Check
- *
- * Returns the number of bytes available for reading.
+ * Internal: Close read end of a pipe (for close() handling)
  * ============================================================================ */
 
-int bsd_pipe_bytes_available(int pipe_idx)
+void bsd_pipe_close_read(task_context_t *ctx, int fd)
 {
-    pipe_buffer_t *pipe = &pipe_table[pipe_idx];
-
-    if (pipe->head >= pipe->tail) {
-        return pipe->head - pipe->tail;
-    } else {
-        return BSD_PIPE_BUFFER_SIZE - pipe->tail + pipe->head;
+    if (!ctx || fd < 0 || fd >= BSD_MAX_FILE_DESCRIPTORS) {
+        return;
     }
-}
 
-/* ============================================================================
- * Pipe Space Available Check
- *
- * Returns the number of bytes that can be written.
- * ============================================================================ */
+    fd_entry_t *entry = &ctx->fds[fd];
+    if (!entry->is_pipe || entry->port == MACH_PORT_NULL) {
+        return;
+    }
 
-int bsd_pipe_space_available(int pipe_idx)
-{
-    return BSD_PIPE_BUFFER_SIZE - 1 - bsd_pipe_bytes_available(pipe_idx);
+    /* Find the pipe buffer by matching read_port */
+    for (int i = 0; i < BSD_MAX_PIPES; i++) {
+        if (pipe_table[i].read_port == entry->port) {
+            pipe_table[i].closed_read = true;
+
+            /* If both ends closed, clean up */
+            if (pipe_table[i].closed_write) {
+                bsd_close_pipe(i);
+            }
+            break;
+        }
+    }
 }
