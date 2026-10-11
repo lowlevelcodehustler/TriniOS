@@ -1,0 +1,19 @@
+# ──────────────────────────────────────────────────────────────────────
+# TriniOS — line-ending and file-type normalization
+#
+# The repo is developed on WSL (LF) and checked out on Windows (CRLF via
+# autocrlf). Normalize all text files to LF in the repository so that
+# cross-platform diffs stay clean. Binary build artifacts are marked
+# explicitly so git never attempts to "normalize" them.
+# ──────────────────────────────────────────────────────────────────────
+
+# Default: treat as text, store and check out with LF endings
+* text=auto eol=lf
+
+# Explicitly binary — never touch these
+*.bin	binary
+*.elf	binary
+*.o		binary
+*.img	binary
+*.iso	binary
+*.cpio	binary
