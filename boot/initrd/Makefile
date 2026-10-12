@@ -35,12 +35,14 @@ user-space:
 
 # ── Copy compiled binaries into rootfs ──────────────────────────────────
 rootfs: user-space
-	@if [ -f $(SRC_DIR)/../output/binaries/hello.bin ]; then \
-		cp $(SRC_DIR)/../output/binaries/hello.bin $(ROOTFS)/bin/hello; \
+	# Ship the ELF itself (not the flat objcopy output): the kernel's
+	# elf_loader needs a real ELF64 header + PT_LOAD segments to load it.
+	@if [ -f $(SRC_DIR)/../output/binaries/hello.elf ]; then \
+		cp $(SRC_DIR)/../output/binaries/hello.elf $(ROOTFS)/bin/hello; \
 		chmod +x $(ROOTFS)/bin/hello; \
-		echo "[INITRD] Copied hello.bin to rootfs/bin/hello"; \
+		echo "[INITRD] Copied hello.elf to rootfs/bin/hello"; \
 	else \
-		echo "[INITRD] WARNING: hello.bin not found, skipping"; \
+		echo "[INITRD] WARNING: hello.elf not found, skipping"; \
 	fi
 	@if [ -f $(SRC_DIR)/../output/binaries/cat.bin ]; then \
 		cp $(SRC_DIR)/../output/binaries/cat.bin $(ROOTFS)/bin/cat; \

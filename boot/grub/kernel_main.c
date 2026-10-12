@@ -29,11 +29,30 @@ static void serial_init(void);
 static void serial_putchar(char c);
 static void kernel_early_console(const char *msg);
 static void kernel_early_hex(uint64_t val);
+static void kernel_early_uint32(uint32_t val);
 static void init_vm_subsystem(void);
 static void init_host_subsystem(void);
 static void create_first_task(void);
-static void jump_to_user_space(uint64_t entry_point);
+static void setup_user_page_tables(uint64_t prog_start, uint64_t prog_end);
+static void install_trampoline(uint64_t entry_point);
+static void enter_user_mode(uint64_t entry_point);
 static void kernel_panic(const char *msg);
+
+/* ── Page-table / image symbols from enter64.asm (identity-mapped) ───── */
+extern uint64_t page_table_pd[];  /* PD for virtual 0–1 GiB: PDE[0]→pt_low, PDE[8]→pt_hi */
+extern uint64_t pt_low[];         /* phase-B PTEs for virtual 0–2 MiB (512 entries) */
+extern uint64_t pt_hi[];          /* phase-B PTEs for virtual 0x1000000–0x1200000 */
+extern uint8_t _end;              /* end of kernel image (assigned by kernel.ld) */
+
+/* ── User-space layout (must stay in sync with the page-table plan above) ─ */
+#define USER_HEAP_BASE    0x1000000ULL   /* hello link base (hello.ld) */
+#define USER_STACK_PAGE   0x100F0000ULL  /* dedicated user stack page */
+#define USER_STACK_TOP    (USER_STACK_PAGE + 4096)
+#define TRAMPOLINE_ADDR   0x100F8000ULL  /* kernel-written ring-3 trampoline */
+
+/* PTE flags */
+#define PTE_PRESENT_RW      0x3   /* P|R/W — supervisor only (U/S=0) */
+#define PTE_PRESENT_RW_US   0xB   /* P|R/W|U/S — user+kernel */
 
 /* ── Global boot info (populated at entry) ────────────────────────────── */
 static trini_boot_info_t g_boot_info;
@@ -53,36 +72,68 @@ void kernel_main(uint64_t mb_info_ptr)
     kernel_early_console("========================================\n");
     kernel_early_console("\n");
 
-    /* ── Step 1: Parse multiboot2 boot info ──────────────────────────── */
+    /* ── Step 1: Parse multiboot2 boot info (spec v2.0 tag walk) ─────── */
     parse_multiboot2_info(mb_info_ptr, &g_boot_info);
 
-    kernel_early_console("Bootloader: ");
-    kernel_early_console(g_boot_info.bootloader_name);
-    kernel_early_console("\n");
+    kernel_early_console("Boot info at 0x");
+    kernel_early_hex(g_boot_info.mb_info_ptr);
+    if (g_boot_info.bootloader_name[0]) {
+        kernel_early_console("\nBootloader: ");
+        kernel_early_console(g_boot_info.bootloader_name);
+        kernel_early_console("\n");
+    }
+    if (g_boot_info.cmdline[0]) {
+        kernel_early_console("Cmdline: ");
+        kernel_early_console(g_boot_info.cmdline);
+        kernel_early_console("\n");
+    }
 
-    kernel_early_console("Memory: ");
-    kernel_early_console(g_boot_info.cmdline);
-    kernel_early_console("\n");
+    /* Log basic memory info (KiB) */
+    kernel_early_console("Memory: lower=");
+    kernel_early_uint32(g_boot_info.mem_lower);
+    kernel_early_console(" KiB, upper=");
+    kernel_early_uint32(g_boot_info.mem_upper);
+    kernel_early_console(" KiB\n");
 
-    /* Log memory map summary */
+    /* Log memory map summary (first few regions) */
     kernel_early_console("Memory map entries: ");
-
-    /* Log initrd info */
-    kernel_early_console("Initrd at 0x");
-    kernel_early_hex(g_boot_info.initrd_addr);
-    kernel_early_console(" size=");
-    kernel_early_hex(g_boot_info.initrd_size);
+    kernel_early_uint32(g_boot_info.mmap_entry_count);
     kernel_early_console("\n");
+    for (uint32_t i = 0; i < g_boot_info.mmap_entry_count && i < 4; i++) {
+        const multiboot2_mmap_entry_t *e = &g_boot_info.mmap_entries[i];
+        kernel_early_console("  [");
+        kernel_early_uint32(i);
+        kernel_early_console("] 0x");
+        kernel_early_hex(e->addr);
+        kernel_early_console("-0x");
+        kernel_early_hex(e->addr + e->len);
+        kernel_early_console(" (");
+        kernel_early_console(mmap_type_name(e->type));
+        kernel_early_console(")\n");
+    }
+
+    /* Log initrd info (arrives as the first multiboot2 module tag) */
+    if (g_boot_info.initrd_addr) {
+        kernel_early_console("Initrd at 0x");
+        kernel_early_hex(g_boot_info.initrd_addr);
+        kernel_early_console("-0x");
+        kernel_early_hex(g_boot_info.initrd_end);
+        kernel_early_console(" size=");
+        kernel_early_hex(g_boot_info.initrd_size);
+        kernel_early_console("\n");
+    }
 
     /* Log framebuffer info */
     if (g_boot_info.fb_addr) {
         kernel_early_console("Framebuffer: 0x");
         kernel_early_hex(g_boot_info.fb_addr);
         kernel_early_console(" (");
-        kernel_early_hex(g_boot_info.fb_width);
+        kernel_early_uint32(g_boot_info.fb_width);
         kernel_early_console("x");
-        kernel_early_hex(g_boot_info.fb_height);
-        kernel_early_console(")\n");
+        kernel_early_uint32(g_boot_info.fb_height);
+        kernel_early_console(") ");
+        kernel_early_uint32(g_boot_info.fb_bpp);
+        kernel_early_console(" bpp\n");
     }
 
     /* ── Step 2: Initialize VM subsystem ─────────────────────────────── */
@@ -223,6 +274,25 @@ static void kernel_early_hex(uint64_t val)
     }
 }
 
+/* ── kernel_early_uint32: print a 32-bit value in decimal ────────────── */
+static void kernel_early_uint32(uint32_t val)
+{
+    char buf[10];
+    int pos = (int)sizeof(buf);
+
+    if (val == 0) {
+        kernel_early_putchar('0');
+        return;
+    }
+    while (val > 0 && pos > 0) {
+        buf[--pos] = (char)('0' + (val % 10));
+        val /= 10;
+    }
+    for (int i = pos; i < (int)sizeof(buf); i++) {
+        kernel_early_putchar(buf[i]);
+    }
+}
+
 /* ── kernel_panic: halt on fatal error ────────────────────────────────── */
 static void kernel_panic(const char *msg)
 {
@@ -250,81 +320,119 @@ static void init_host_subsystem(void)
     /* Placeholder: real host init will set up CPU info, SMP, etc. */
 }
 
-/* ── jump_to_user_space — Switch to user-mode and jump to entry point ───
+/* ── setup_user_page_tables — phase B of the page-table plan ────────────
  *
- * This function switches from kernel mode (supervisor privileges) to
- * user mode (user privileges) and jumps to the given entry point.
- *
- * Steps:
- *   1. Set up a new stack pointer in user space
- *   2. Push initial registers for the "return" (simulating a thread start)
- *   3. Use iretq (interrupt return) to switch privilege levels
- *
- * NOTE: This is a simplified implementation. A full Mach kernel would:
- *   - Create a new TCB with proper user-space VM mapping
- *   - Set up segment registers (CS, DS, SS, FS, GS) for user mode
- *   - Handle the transition via a syscall/exception gate
+ * enter64.asm boots long mode on a single 2 MiB huge page (phase A) so this
+ * code can run. Before entering ring 3 we replace it with per-page tables:
+ *   - pt_low covers virtual 0–2 MiB: kernel image pages become supervisor-
+ *     only (U/S=0), while the VGA text buffer page stays user+kernel
+ *     writable so ring-3 programs can write it directly.
+ *   - pt_hi covers virtual 0x1000000–0x1200000: program pages, the user
+ *     stack page and the trampoline page become user RWX (U/S=1).
+ * The tables themselves live inside the kernel image, so they remain mapped.
  */
-
-static void jump_to_user_space(uint64_t entry_point)
+static void setup_user_page_tables(uint64_t prog_start, uint64_t prog_end)
 {
-    kernel_early_console("Jumping to user-space at 0x");
+    /* The kernel image must fit inside the first 2 MiB (pt_low coverage);
+     * otherwise the per-page loop below would write past pt_low. */
+    if ((uint64_t)&_end >= 0x200000ULL) {
+        kernel_panic("Kernel image exceeds 2 MiB — page-table plan violated");
+    }
+
+    /* VGA text buffer: ring-3 hello writes here directly */
+    pt_low[0xB8000 >> 12] = 0xB8000 | PTE_PRESENT_RW_US;
+
+    /* Kernel image pages [0x100000, _end): supervisor-only (U/S=0) */
+    for (uint64_t p = 0x100000ULL; p < (uint64_t)&_end; p += 4096) {
+        pt_low[p >> 12] = p | PTE_PRESENT_RW;
+    }
+
+    /* Program pages: user RWX */
+    for (uint64_t v = prog_start & ~4095ULL; v < prog_end; v += 4096) {
+        pt_hi[(v - USER_HEAP_BASE) >> 12] = v | PTE_PRESENT_RW_US;
+    }
+
+    /* User stack page + trampoline page: user RWX */
+    pt_hi[(USER_STACK_PAGE - USER_HEAP_BASE) >> 12] = USER_STACK_PAGE | PTE_PRESENT_RW_US;
+    pt_hi[(TRAMPOLINE_ADDR - USER_HEAP_BASE) >> 12] = TRAMPOLINE_ADDR | PTE_PRESENT_RW_US;
+
+    /* Activate: replace the phase-A huge page with per-page tables.
+     * In-place modification is safe — all table pages stay mapped, and the
+     * CPU invalidates TLB entries derived from a modified PDE automatically. */
+    page_table_pd[0] = (uint64_t)pt_low | 0x3;   /* P|R/W, no PS bit */
+    page_table_pd[8] = (uint64_t)pt_hi  | 0x3;
+}
+
+/* ── install_trampoline — write the ring-3 trampoline into user space ───
+ *
+ * After iretq the CPU keeps DS/ES at their old (kernel) selectors, and a
+ * ring-3 process using kernel data selectors would #GP on its first memory
+ * access. The trampoline reloads the user data segments before jumping to
+ * the program entry point:
+ *
+ *   offset  bytes                        instruction
+ *   0x00    B8 20 00                    mov $0x20, %ax      ; user data selector
+ *   0x03    8E D0                       mov %ax, %ds
+ *   0x05    8E C0                       mov %ax, %es
+ *   0x07    8E C5                       mov %ax, %fs
+ *   0x09    8E C6                       mov %ax, %gs
+ *   0x0B    48 8B 05 06 00 00 00       mov [rip+6], %rax   ; load target slot
+ *   0x12    FF E0                       jmp *%rax           ; → entry point
+ *   0x14    (pad to offset 24)
+ *   0x18    <uint64 target>             program entry point
+ */
+static void install_trampoline(uint64_t entry_point)
+{
+    static const uint8_t code[20] = {
+        0xB8, 0x20, 0x00,                       /* mov $0x20, %ax */
+        0x8E, 0xD0,                             /* mov %ax, %ds */
+        0x8E, 0xC0,                             /* mov %ax, %es */
+        0x8E, 0xC5,                             /* mov %ax, %fs */
+        0x8E, 0xC6,                             /* mov %ax, %gs */
+        0x48, 0x8B, 0x05, 0x06, 0x00, 0x00, 0x00, /* mov [rip+6], %rax */
+        0xFF, 0xE0                              /* jmp *%rax */
+    };
+
+    uint8_t *t = (uint8_t *)TRAMPOLINE_ADDR;
+    for (int i = 0; i < 20; i++) {
+        t[i] = code[i];
+    }
+    *(volatile uint64_t *)(t + 24) = entry_point;
+}
+
+/* ── enter_user_mode — the actual ring-3 transition ─────────────────────
+ *
+ * Builds an iretq frame on the user stack and returns to ring 3:
+ *   [RIP]    = trampoline (reloads DS/ES, then jumps to entry_point)
+ *   [CS]     = 0x18 (user code, DPL 3)
+ *   [RFLAGS] = 0x200 (IF set; IOPL=0 — the TSS I/O bitmap allows out/in)
+ *   [SS]     = 0x23 (user data, DPL 3)
+ *   [new RSP]= just below the frame
+ */
+static void enter_user_mode(uint64_t entry_point)
+{
+    install_trampoline(entry_point);
+
+    uint64_t *frame = (uint64_t *)(USER_STACK_TOP - 5 * 8);
+    frame[0] = TRAMPOLINE_ADDR;          /* RIP → trampoline */
+    frame[1] = 0x18;                    /* CS: user code */
+    frame[2] = 0x200;                   /* RFLAGS: IF set */
+    frame[3] = 0x23;                    /* SS: user data */
+    frame[4] = USER_STACK_TOP - 5 * 8;  /* new RSP: just below the frame */
+
+    kernel_early_console("Entering ring 3 at 0x");
     kernel_early_hex(entry_point);
     kernel_early_console("\n");
 
-    /* For Phase 1, we use a simple far return (lretq) to switch CS.
-     * This requires a GDT entry for user-mode code segment.
-     *
-     * The kernel_entry.asm should have already set up:
-     *   - Kernel code segment (CS = 0x8): ring 0, execute+read
-     *   - User code segment (CS = 0x1B): ring 3, execute+read
-     *   - Kernel data segment (DS = 0x10): ring 0, read+write
-     *   - User data segment (DS = 0x23): ring 3, read+write
-     */
-
-    /* Use inline assembly to perform the privilege level switch.
-     * We push the user-space stack pointer, RIP, RFLAGS, SS, and CS
-     * onto the kernel stack, then use iretq to return to user mode. */
-
     __asm__ volatile (
-        /* Set up user-space stack pointer (top of 4KB page at entry_point) */
-        "mov %0, %%rsp\n"
-
-        /* Use iretq to switch to user mode.
-         * The values below are pushed onto the stack in the order expected by iretq:
-         *   RIP    = entry_point (new instruction pointer)
-         *   RFLAGS = EF (EFLAGS with interrupt enable, bit 0x200)
-         *   CS     = 0x1B (user-mode code segment selector)
-         *   SS     = 0x23 (user-mode data segment selector)
-         *   RSP    = user_stack (new stack pointer in user space)
-         */
-        "pushq %0\n"              /* Push entry point (will be new RIP) */
-        "pushq $0x200\n"          /* Push RFLAGS with interrupt flag */
-        "pushq $0x1B\n"           /* Push user CS selector */
-
-        /* At this point, we need SS:RSP on the stack too.
-         * Since we just changed RSP to the entry_point, we use that as both
-         * the new stack pointer AND the value to push for SS:RSP.
-         * This is a simplification — in reality, we'd allocate a proper
-         * user-space stack via vm_allocate. */
-
-        /* Alternative approach: use lretq with explicit CS switch */
-        "pop %%rax\n"             /* Pop entry point into RAX */
-
-        /* Far return to user mode: lretq $0x1B (CS) then RIP from stack */
-        ".byte 0x48\n"            /* rex prefix for operand size */
-        ".byte 0xcf\n"            /* lretq opcode */
-
-        /* This won't work correctly without proper GDT setup.
-         * For now, we'll just halt and let the developer see the console message. */
-        "cli\n"
-        "hlt\n"
+        "mov %0, %%rsp\n\t"
+        "iretq\n\t"
         :
-        : "r" (entry_point)
-        : "rax", "rsp"
+        : "r"(frame)
+        : "memory"
     );
 
-    /* Should never reach here */
+    /* Never reached */
     for (;;) {
         __asm__ volatile("hlt");
     }
@@ -332,19 +440,18 @@ static void jump_to_user_space(uint64_t entry_point)
 
 /* ── create_first_task — Load and execute the first user-space program ───
  *
- * Strategy (Phase 1):
+ * Strategy:
  *   1. Get the initrd root filesystem tree from initrd_get_root()
- *   2. Find /bin/hello in the tree using elf_find_in_initrd()
- *   3. Parse ELF header to get entry point via elf_parse()
- *   4. Jump to user-space at that entry point
+ *   2. Find /bin/hello in the tree using elf_find_in_initrd() (the file
+ *      must be an ELF64 binary — see boot/initrd/src/Makefile)
+ *   3. Parse the ELF header to get the entry point via elf_parse()
+ *   4. Map user pages: program segments, a dedicated stack page and the
+ *      ring-3 trampoline page (setup_user_page_tables)
+ *   5. Copy PT_LOAD segments into the mapped region (elf_load_segments)
+ *   6. Enter ring 3 at the entry point via an iretq frame
  *
- * NOTE: This is a simplified implementation that does NOT properly set up:
- *   - User-space VM mapping (segments are copied, not mapped)
- *   - User-space stack allocation
- *   - Segment register setup (FS, GS, DS, SS)
- *   - TCB creation for Mach task management
- *
- * Full implementation requires kernel-side ELF loading + VM manipulation.
+ * NOTE: still a simplified implementation — no TCB creation, no per-task VM
+ * bookkeeping and no syscall interface yet; those belong to later phases.
  */
 
 static void create_first_task(void)
@@ -400,6 +507,22 @@ static void create_first_task(void)
     kernel_early_hex(result.entry_point);
     kernel_early_console("\n");
 
+    /* Compute the virtual range the program occupies (all PT_LOAD segments) */
+    uint64_t seg_start = 0, seg_end = 0;
+    if (!elf_segment_range(binary_data, binary_size, &seg_start, &seg_end)) {
+        kernel_early_console("ERROR: No loadable ELF segments\n");
+        kernel_panic("No loadable segments");
+    }
+
+    /* Map the user pages (program + stack + trampoline) before touching them */
+    setup_user_page_tables(seg_start, seg_end);
+
+    /* Copy PT_LOAD segments into the mapped user region (zero-fills BSS tail) */
+    if (!elf_load_segments(binary_data, binary_size)) {
+        kernel_early_console("ERROR: ELF segment load failed\n");
+        kernel_panic("ELF segment load failed");
+    }
+
     /* Jump to user-space! */
-    jump_to_user_space(result.entry_point);
+    enter_user_mode(result.entry_point);
 }

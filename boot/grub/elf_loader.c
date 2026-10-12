@@ -157,8 +157,9 @@ bool elf_parse(const void *data, uint64_t size, elf_load_result_t *result)
                 /* Fixed address: use p_vaddr directly */
                 load_base = phdr->p_vaddr;
             } else {
-                /* PIE: we'd allocate at any address — for now, use 0 as base hint */
-                load_base = 0;
+                /* PIE: loaded at the fixed user-space base used by
+                 * elf_load_segments() — keep both in sync. */
+                load_base = TRINI_USER_LOAD_BASE;
             }
             first_load = false;
         }
@@ -250,6 +251,146 @@ bool elf_find_in_initrd(void *root, const char *path,
 
     *out_data = entry->data;
     *out_size = entry->size;
+
+    return true;
+}
+
+/* ============================================================================
+ * PT_LOAD segment collection (shared by elf_segment_range / elf_load_segments)
+ * ===========================================================================*/
+
+#define MAX_LOAD_SEGMENTS 32
+
+struct load_seg {
+    uint64_t vstart;   /* virtual start address (absolute) */
+    uint64_t vsize;    /* p_memsz */
+    uint64_t foff;     /* file offset of segment data */
+    uint64_t fsz;      /* p_filesz (bytes present in the file) */
+};
+
+/* Collect all PT_LOAD segments. Returns count, or -1 on error. */
+static int elf_collect_loads(const void *data, uint64_t size,
+                             struct load_seg *segs)
+{
+    if (!data || size < sizeof(elf64_header_t)) {
+        return -1;
+    }
+
+    const elf64_header_t *hdr = (const elf64_header_t *)data;
+
+    if (!elf_is_valid(data, size) || hdr->e_machine != EM_X86_64) {
+        return -1;
+    }
+    if (hdr->e_type != ET_EXEC && hdr->e_type != ET_DYN) {
+        return -1;
+    }
+    if (hdr->e_phnum == 0 || hdr->e_phentsize < sizeof(elf64_phdr_t)) {
+        return -1;
+    }
+
+    const char *file = (const char *)data;
+    const elf64_phdr_t *phdrs = (const elf64_phdr_t *)(file + hdr->e_phoff);
+
+    /* Validate phdr table bounds */
+    if (hdr->e_phoff + ((uint64_t)hdr->e_phnum * hdr->e_phentsize) > size) {
+        return -1;
+    }
+
+    bool is_pie = (hdr->e_type == ET_DYN);
+    uint64_t base = is_pie ? TRINI_USER_LOAD_BASE : 0;
+
+    int n = 0;
+    for (uint16_t i = 0; i < hdr->e_phnum && n < MAX_LOAD_SEGMENTS; i++) {
+        const elf64_phdr_t *phdr = &phdrs[i];
+        if (phdr->p_type != PT_LOAD) {
+            continue;
+        }
+
+        /* File offset must be inside the image */
+        if (phdr->p_offset + phdr->p_filesz > size) {
+            return -1;
+        }
+
+        segs[n].vstart = base + phdr->p_vaddr;
+        segs[n].vsize  = phdr->p_memsz;
+        segs[n].foff   = phdr->p_offset;
+        segs[n].fsz    = phdr->p_filesz;
+        n++;
+    }
+
+    return (n > 0) ? n : -1;
+}
+
+/* ============================================================================
+ * elf_segment_range — virtual range covered by all PT_LOAD segments
+ * ===========================================================================*/
+
+bool elf_segment_range(const void *data, uint64_t size,
+                       uint64_t *out_start, uint64_t *out_end)
+{
+    if (!out_start || !out_end) {
+        return false;
+    }
+
+    struct load_seg segs[MAX_LOAD_SEGMENTS];
+    int n = elf_collect_loads(data, size, segs);
+    if (n < 0) {
+        return false;
+    }
+
+    uint64_t start = segs[0].vstart;
+    uint64_t end   = segs[0].vstart + segs[0].vsize;
+
+    for (int i = 1; i < n; i++) {
+        if (segs[i].vstart < start) start = segs[i].vstart;
+        uint64_t seg_end = segs[i].vstart + segs[i].vsize;
+        if (seg_end > end) end = seg_end;
+    }
+
+    /* Everything must fit inside the mapped user region */
+    if (start < TRINI_USER_LOAD_BASE || end > TRINI_USER_REGION_END) {
+        return false;
+    }
+
+    *out_start = start;
+    *out_end   = end;
+    return true;
+}
+
+/* ============================================================================
+ * elf_load_segments — copy PT_LOAD segments into their virtual addresses
+ *
+ * The target pages must already be mapped (setup_user_page_tables()).
+ * ===========================================================================*/
+
+bool elf_load_segments(const void *data, uint64_t size)
+{
+    struct load_seg segs[MAX_LOAD_SEGMENTS];
+    int n = elf_collect_loads(data, size, segs);
+    if (n < 0) {
+        return false;
+    }
+
+    const uint8_t *file = (const uint8_t *)data;
+
+    for (int i = 0; i < n; i++) {
+        /* Target must be inside the mapped user region */
+        if (segs[i].vstart < TRINI_USER_LOAD_BASE ||
+            segs[i].vstart + segs[i].vsize > TRINI_USER_REGION_END) {
+            return false;
+        }
+
+        uint8_t *dst = (uint8_t *)segs[i].vstart;
+
+        /* Copy file-backed bytes */
+        for (uint64_t j = 0; j < segs[i].fsz; j++) {
+            dst[j] = file[segs[i].foff + j];
+        }
+        /* Zero-fill the BSS tail (p_filesz < p_memsz) */
+        for (uint64_t j = segs[i].fsz; j < segs[i].vsize; j++) {
+            dst[j] = 0;
+        }
+    }
 
     return true;
 }

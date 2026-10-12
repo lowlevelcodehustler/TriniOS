@@ -91,8 +91,10 @@ void _start(void)
     vga_print("\n");
     vga_print("Press Ctrl+C in QEMU to halt.\n");
 
-    /* Infinite loop — user-space should never return to kernel */
+    /* Spin forever — user-space should never return to the kernel.
+     * NOTE: hlt is a privileged instruction and would #UD in ring 3;
+     * pause is the unprivileged spin-loop idiom. */
     for (;;) {
-        __asm__ volatile("hlt");
+        __asm__ volatile("pause");
     }
 }

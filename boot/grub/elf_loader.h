@@ -67,6 +67,14 @@ typedef struct {
 } elf_load_result_t;
 
 /* ============================================================================
+ * User-space load region (must match the page-table plan in kernel_main.c:
+ * pt_hi maps virtual 0x1000000–0x1200000 as user RWX)
+ * ===========================================================================*/
+
+#define TRINI_USER_LOAD_BASE    0x1000000ULL   /* hello link base (hello.ld) */
+#define TRINI_USER_REGION_END   0x1200000ULL   /* end of the mapped user region */
+
+/* ============================================================================
  * API
  * ============================================================================ */
 
@@ -98,5 +106,30 @@ bool elf_parse(const void *data, uint64_t size, elf_load_result_t *result);
  */
 bool elf_find_in_initrd(void *root, const char *path,
                         const void **out_data, uint64_t *out_size);
+
+/**
+ * Compute the virtual address range covered by all PT_LOAD segments.
+ * ET_EXEC: p_vaddr as-is. ET_DYN (PIE): loaded at TRINI_USER_LOAD_BASE.
+ * @param data       Pointer to ELF file data in memory
+ * @param size       Size of the ELF file in bytes
+ * @param out_start  Output: lowest segment start address
+ * @param out_end    Output: highest segment end address (exclusive)
+ * @return           true on success (at least one PT_LOAD, all inside the
+ *                   mapped user region)
+ */
+bool elf_segment_range(const void *data, uint64_t size,
+                       uint64_t *out_start, uint64_t *out_end);
+
+/**
+ * Copy all PT_LOAD segments from file data into their virtual addresses.
+ * Zero-fills the BSS tail of each segment (p_filesz < p_memsz).
+ * The target pages must already be mapped and writable — call
+ * setup_user_page_tables() first. ET_DYN binaries are loaded at
+ * TRINI_USER_LOAD_BASE.
+ * @param data  Pointer to ELF file data in memory
+ * @param size  Size of the ELF file in bytes
+ * @return      true on success (all segments inside the mapped user region)
+ */
+bool elf_load_segments(const void *data, uint64_t size);
 
 #endif /* ELF_LOADER_H */
