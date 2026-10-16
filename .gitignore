@@ -30,6 +30,9 @@ kernel/*.elf
 kernel/System.map
 kernel/vmlinux
 kernel/vmlinuz
+# autoconf-style build debris (depcomp .deps dirs, dirstamp stamps)
+.deps/
+*.dirstamp
 
 # =====================
 # Bootloader Outputs
@@ -85,7 +88,10 @@ venv/
 CMakeCache.txt
 CMakeFiles/
 cmake_install.cmake
-Makefile
+# Top-level only: CMake generates a Makefile at the build root. A bare
+# "Makefile" pattern shadows every untracked Makefile in the tree (it
+# previously hid boot/initrd/src/Makefile, which had to be force-added).
+/Makefile
 compile_commands.json
 
 # =====================
