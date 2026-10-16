@@ -153,16 +153,17 @@ echo "[*] Booting from ISO: $ISO_FILE"
 
 # Display configuration
 if [ -n "$SERIAL_LOG" ]; then
-    # Headless mode: capture VGA output to file via text-mode emulation
-    # Use -display none with -serial null and let the kernel's VGA buffer
-    # be captured via QEMU's text console logging.
+    # Headless mode: no display; capture the serial console (COM1) to a file.
+    # The kernel's boot messages, initrd unpacking and self-tests all go out
+    # on the serial port, so this is what you inspect after QEMU exits.
+    # (VGA-only output such as hello's banner needs interactive curses mode.)
     QEMU_ARGS+=(
         -display none
-        -serial null
+        -serial "file:$SERIAL_LOG"
     )
-    echo "[*] Headless mode — serial output not available (GRUB2 claims COM1)"
-    echo "    To see boot messages, run interactively without -f:"
-    echo "      ./run_qemu.sh"
+    echo "[*] Headless mode — serial output captured to: $SERIAL_LOG"
+    echo "    (VGA-only output such as hello's banner needs interactive mode:"
+    echo "     ./run_qemu.sh)"
 else
     # Interactive curses display with VGA text mode
     QEMU_ARGS+=(
