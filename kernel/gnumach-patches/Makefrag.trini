@@ -1,0 +1,70 @@
+# ============================================================================
+# TriniOS Kernel Extension Build Fragment
+# ============================================================================
+# This file is included by GNU Mach's Makefile.am to build TriniOS extensions.
+# Paths are relative to the gnumach source tree (top_srcdir).
+
+# We need absolute paths since kernel/ lives outside of gnumach/.
+TRINI_ROOT := /root/TriniOS/kernel
+
+# ============================================================================
+# TriniOS Kernel Extension Build Fragment — Phase 2 Approach
+# ============================================================================
+# Strategy: Only build files that do NOT conflict with gnumach's internal headers.
+# Files that include <mach/mach.h> or <ipc/ipc_port.h> (gnumach native) are excluded
+# because they cause type conflicts between MIG-generated and native declarations.
+#
+# Excluded from kernel library:
+#   - bootstrap_trini.c: includes <mach/mach.h>, <kern/task.h>, <ipc/ipc_port.h>
+#     These conflict with gnumach's own internal headers (task_deallocate, ipc_port_init).
+#     Will be built separately and linked after gnumach completes.
+#   - server_registry.c: includes "ipc_port_gnumach.h" which pulls in <ipc/ipc_port.h>
+#     Conflicts with gnumach's native ipc_port_init signature.
+#     Will be built as part of BSD server build chain.
+#
+# Included (no header conflicts):
+#   - task_manager.c: uses <mach/mach.h> but only calls trini_task_* functions
+#   - host_local.c: no Mach headers, just freestanding utilities
+#   - vm_manager.c: VM management with gnumach types
+#   - gpu_mem.c: GPU memory pool management
+
+TRINI_KEXT_SOURCES = \
+	$(TRINI_ROOT)/task/task_manager.c \
+	$(TRINI_ROOT)/host/host_local.c \
+	$(TRINI_ROOT)/mm/vm_manager.c \
+	$(TRINI_ROOT)/mm/gpu_mem.c
+
+# Add TriniOS kernel extension sources to the kernel library
+libkernel_a_SOURCES += $(TRINI_KEXT_SOURCES)
+
+# Add TriniOS include paths (absolute, relative to gnumach build dir)
+AM_CPPFLAGS += -I$(TRINI_ROOT)
+AM_CPPFLAGS += -I$(TRINI_ROOT)/asi
+AM_CPPFLAGS += -I$(TRINI_ROOT)/ipc
+AM_CPPFLAGS += -I$(TRINI_ROOT)/task
+AM_CPPFLAGS += -I$(TRINI_ROOT)/host
+AM_CPPFLAGS += -I$(TRINI_ROOT)/mm
+
+# Add gnumach source include directory for mach/*.h headers (std_types.h, mach_types.h, etc.)
+AM_CPPFLAGS += -I$(top_srcdir)/include
+
+# Add gnumach build include directory for generated mach/mach.h umbrella header.
+# This is needed by bootstrap_trini.c which includes <mach/mach.h>.
+# The task_deallocate conflict was caused by external -I$(top_srcdir)/kern overriding
+# gnumach's internal kern/task.h — we removed that external path above, so this should
+# now work without conflicts.
+AM_CPPFLAGS += -I$(abs_top_builddir)/build/include
+
+# Add gnumach i386 architecture-specific include directories for vm_param.h, thread.h etc.
+AM_CPPFLAGS += -I$(top_srcdir)/i386/i386
+AM_CPPFLAGS += -I$(top_srcdir)/i386/include/mach/i386
+
+# NOTE: We do NOT add -I$(top_srcdir)/kern or -I$(top_srcdir)/machine as
+# external include paths. gnumach's own internal header chain handles kern/ and
+# machine/ headers correctly when built inside its tree. Adding them externally
+# causes conflicting type errors (e.g., task_deallocate void vs kern_return_t).
+# bootstrap_trini.c includes <kern/task.h> etc. which resolve via gnumach's
+# native include chain, not our external -I flags.
+
+# Define TRINI_OS for conditional compilation in startup.c patch
+AM_CFLAGS += -DTRINI_OS

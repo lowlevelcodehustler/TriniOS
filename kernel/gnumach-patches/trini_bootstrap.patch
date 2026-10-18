@@ -1,0 +1,29 @@
+diff --git a/kern/startup.c b/kern/startup.c
+index ORIGINAL..MODIFIED
+--- a/kern/startup.c
++++ b/kern/startup.c
+@@ -51,6 +51,9 @@
+ #include <kern/bootstrap.h>
+ #include <kern/startup.h>
+ #include <kern/printf.h>
++#include <vm/vm_kern.h>
++/* TriniOS kernel extensions */
++extern void trini_bootstrap(void);
+ 
+ #include <vm/vm_map.h>
+ #include <vm/vm_object.h>
+@@ -265,6 +268,14 @@ start_kernel_threads(void)
+ 	 *	Start the user bootstrap.
+ 	 */
+ 	bootstrap_create();
++
++#ifdef TRINI_OS
++	/*
++	 *	Initialize TriniOS kernel extensions after Mach core
++	 *	but before user-space servers start.
++	 */
++	trini_bootstrap();
++#endif /* TRINI_OS */
+ 
+ #if	XPR_DEBUG
+ 	xprinit();		/* XXX */

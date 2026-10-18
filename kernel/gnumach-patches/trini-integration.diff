@@ -1,0 +1,1667 @@
+commit 3ba5df9efdb46ffc4fd80ea3c359756093134a22
+Author: Trinitris Ltd <trinitris@proton.me>
+Date:   Sun Jul 19 18:15:35 2026 +0100
+
+    Minor tinkering in foolish way to integrate userspace with kernel (AI-gen).
+
+diff --git a/Makefrag.am b/Makefrag.am
+index 8427655b..abd81ccc 100644
+--- a/Makefrag.am
++++ b/Makefrag.am
+@@ -613,3 +613,6 @@ include x86_64/Makefrag.am
+ 
+ # aarch64.
+ include aarch64/Makefrag.am
++
++# TriniOS kernel extensions
++include Makefrag.trini
+diff --git a/Makefrag.am.trini.bak b/Makefrag.am.trini.bak
+new file mode 100644
+index 00000000..8427655b
+--- /dev/null
++++ b/Makefrag.am.trini.bak
+@@ -0,0 +1,615 @@
++# Main Makefile fragment for GNU Mach.
++
++# Copyright (C) 1997, 1999, 2004, 2006, 2007, 2009 Free Software
++# Foundation, Inc.
++
++# Permission to use, copy, modify and distribute this software and its
++# documentation is hereby granted, provided that both the copyright
++# notice and this permission notice appear in all copies of the
++# software, derivative works or modified versions, and any portions
++# thereof, and that both notices appear in supporting documentation.
++#
++# THE FREE SOFTWARE FOUNDATION ALLOWS FREE USE OF THIS SOFTWARE IN ITS
++# "AS IS" CONDITION.  THE FREE SOFTWARE FOUNDATION DISCLAIMS ANY
++# LIABILITY OF ANY KIND FOR ANY DAMAGES WHATSOEVER RESULTING FROM THE
++# USE OF THIS SOFTWARE.
++
++#
++# DDB support --- eventually to die.  Please.
++#
++
++# Do we want the icky kernel debugger?
++if enable_kdb
++libkernel_a_SOURCES += \
++	ddb/db_access.c \
++	ddb/db_access.h \
++	ddb/db_elf.c \
++	ddb/db_elf.h \
++	ddb/db_break.c \
++	ddb/db_break.h \
++	ddb/db_command.c \
++	ddb/db_command.h \
++	ddb/db_cond.c \
++	ddb/db_cond.h \
++	ddb/db_examine.c \
++	ddb/db_examine.h \
++	ddb/db_expr.c \
++	ddb/db_expr.h \
++	ddb/db_ext_symtab.c \
++	ddb/db_input.c \
++	ddb/db_input.h \
++	ddb/db_lex.c \
++	ddb/db_lex.h \
++	ddb/db_macro.c \
++	ddb/db_macro.h \
++	ddb/db_mp.c \
++	ddb/db_mp.h \
++	ddb/db_output.c \
++	ddb/db_output.h \
++	ddb/db_print.c \
++	ddb/db_print.h \
++	ddb/db_run.c \
++	ddb/db_run.h \
++	ddb/db_sym.c \
++	ddb/db_sym.h \
++	ddb/db_task_thread.c \
++	ddb/db_task_thread.h \
++	ddb/db_trap.c \
++	ddb/db_trap.h \
++	ddb/db_variables.c \
++	ddb/db_variables.h \
++	ddb/db_watch.c \
++	ddb/db_watch.h \
++	ddb/db_write_cmd.c \
++	ddb/db_write_cmd.h \
++	ddb/nlist.h \
++	ddb/stab.h \
++	ddb/tr.h
++
++# We need frame pointers for trace to work properly.
++AM_CFLAGS += -fno-omit-frame-pointer -fno-optimize-sibling-calls
++endif
++
++
++#
++# IPC implementation.
++#
++
++libkernel_a_SOURCES += \
++	ipc/copy_user.c \
++	ipc/copy_user.h \
++	ipc/ipc_entry.c \
++	ipc/ipc_entry.h \
++	ipc/ipc_init.c \
++	ipc/ipc_init.h \
++	ipc/ipc_kmsg.c \
++	ipc/ipc_kmsg.h \
++	ipc/ipc_kmsg_queue.h \
++	ipc/ipc_machdep.h \
++	ipc/ipc_marequest.c \
++	ipc/ipc_marequest.h \
++	ipc/ipc_mqueue.c \
++	ipc/ipc_mqueue.h \
++	ipc/ipc_notify.c \
++	ipc/ipc_notify.h \
++	ipc/ipc_object.c \
++	ipc/ipc_object.h \
++	ipc/ipc_port.c \
++	ipc/ipc_port.h \
++	ipc/ipc_print.h \
++	ipc/ipc_pset.c \
++	ipc/ipc_pset.h \
++	ipc/ipc_right.c \
++	ipc/ipc_right.h \
++	ipc/ipc_space.c \
++	ipc/ipc_space.h \
++	ipc/ipc_table.c \
++	ipc/ipc_table.h \
++	ipc/ipc_target.c \
++	ipc/ipc_target.h \
++	ipc/ipc_thread.c \
++	ipc/ipc_thread.h \
++	ipc/ipc_types.h \
++	ipc/mach_msg.c \
++	ipc/mach_msg.h \
++	ipc/mach_port.c \
++	ipc/mach_port.h \
++	ipc/mach_debug.c \
++	ipc/port.h
++EXTRA_DIST += \
++	ipc/mach_port.srv \
++	ipc/notify.defs
++
++
++#
++# `kernel' implementation (tasks, threads, trivia, etc.).
++#
++
++libkernel_a_SOURCES += \
++	kern/assert.h \
++	kern/ast.c \
++	kern/ast.h \
++	kern/atomic.h \
++	kern/boot_script.h \
++	kern/bootstrap.c \
++	kern/bootstrap.h \
++	kern/counters.c \
++	kern/counters.h \
++	kern/cpu_number.h \
++	kern/debug.c \
++	kern/debug.h \
++	kern/eventcount.c \
++	kern/eventcount.h \
++	kern/exception.c \
++	kern/exception.h \
++	kern/gsync.c \
++	kern/gsync.h \
++	kern/host.c \
++	kern/host.h \
++	kern/ipc_host.c \
++	kern/ipc_host.h \
++	kern/ipc_kobject.c \
++	kern/ipc_kobject.h \
++	kern/ipc_mig.c \
++	kern/ipc_mig.h \
++	kern/ipc_sched.c \
++	kern/ipc_sched.h \
++	kern/ipc_tt.c \
++	kern/ipc_tt.h \
++	kern/kalloc.h \
++	kern/kern_types.h \
++	kern/kmutex.c \
++	kern/kmutex.h \
++	kern/list.h \
++	kern/lock.c \
++	kern/lock.h \
++	kern/lock_mon.c \
++	kern/log2.h \
++	kern/mach_clock.c \
++	kern/mach_clock.h \
++	kern/mach_factor.c \
++	kern/mach_factor.h \
++	kern/machine.c \
++	kern/machine.h \
++	kern/macros.h \
++	kern/pc_sample.c \
++	kern/pc_sample.h \
++	kern/printf.c \
++	kern/printf.h \
++	kern/priority.c \
++	kern/priority.h \
++	kern/processor.c \
++	kern/processor.h \
++	kern/profile.c \
++	kern/queue.c \
++	kern/queue.h \
++	kern/rbtree.c \
++	kern/rbtree.h \
++	kern/rbtree_i.h \
++	kern/rdxtree.c \
++	kern/rdxtree.h \
++	kern/rdxtree_i.h \
++	kern/refcount.h \
++	kern/slab.c \
++	kern/slab.h \
++	kern/smp.h \
++	kern/smp.c \
++	kern/sched.h \
++	kern/sched_prim.c \
++	kern/sched_prim.h \
++	kern/shuttle.h \
++	kern/startup.c \
++	kern/startup.h \
++	kern/strings.c \
++	kern/syscall_emulation.c \
++	kern/syscall_emulation.h \
++	kern/syscall_subr.c \
++	kern/syscall_subr.h \
++	kern/syscall_sw.c \
++	kern/syscall_sw.h \
++	kern/task.c \
++	kern/task.h \
++	kern/thread.c \
++	kern/thread.h \
++	kern/thread_swap.c \
++	kern/thread_swap.h \
++	kern/timer.c \
++	kern/timer.h \
++	kern/xpr.c \
++	kern/xpr.h \
++	kern/elf-load.c \
++	kern/boot_script.c
++EXTRA_DIST += \
++	kern/exc.defs \
++	kern/mach.srv \
++	kern/mach4.srv \
++	kern/gnumach.srv \
++	kern/experimental.srv \
++	kern/mach_debug.srv \
++	kern/mach_host.srv \
++	kern/task_notify.cli
++
++
++#
++# Still more trivia.
++#
++
++libkernel_a_SOURCES += \
++	util/atoi.c \
++	util/atoi.h \
++	util/byteorder.h \
++	util/byteorder.c
++
++#
++# Virtual memory implementation.
++#
++
++libkernel_a_SOURCES += \
++	vm/memory_object_proxy.c \
++	vm/memory_object_proxy.h \
++	vm/memory_object.c \
++	vm/memory_object.h \
++	vm/pmap.h \
++	vm/vm_debug.c \
++	vm/vm_external.c \
++	vm/vm_external.h \
++	vm/vm_fault.c \
++	vm/vm_fault.h \
++	vm/vm_init.c \
++	vm/vm_init.h \
++	vm/vm_kern.c \
++	vm/vm_kern.h \
++	vm/vm_map.c \
++	vm/vm_map.h \
++	vm/vm_object.c \
++	vm/vm_object.h \
++	vm/vm_page.c \
++	vm/vm_page.h \
++	vm/vm_pageout.c \
++	vm/vm_pageout.h \
++	vm/vm_print.h \
++	vm/vm_resident.c \
++	vm/vm_resident.h \
++	vm/vm_types.h \
++	vm/vm_user.c \
++	vm/vm_user.h
++EXTRA_DIST += \
++	vm/memory_object_default.cli \
++	vm/memory_object_user.cli
++
++
++#
++# Device driver support.
++#
++
++# These device support files are always needed; the others are needed only if
++# particular drivers want the routines.
++# TODO.  Functions in device/subrs.c should each be moved elsewhere.
++libkernel_a_SOURCES += \
++	device/blkio.c \
++	device/blkio.h \
++	device/buf.h \
++	device/chario.c \
++	device/chario.h \
++	device/cirbuf.h \
++	device/conf.h \
++	device/cons.c \
++	device/cons.h \
++	device/device_emul.h \
++	device/dev_hdr.h \
++	device/dev_lookup.c \
++	device/dev_master.h \
++	device/dev_name.c \
++	device/dev_pager.c \
++	device/dev_pager.h \
++	device/device_init.c \
++	device/device_init.h \
++	device/device_port.h \
++	device/device_types_kernel.h \
++	device/ds_routines.c \
++	device/ds_routines.h \
++	device/if_ether.h \
++	device/if_hdr.h \
++	device/input.h \
++	device/intr.c \
++	device/intr.h \
++	device/io_req.h \
++	device/net_io.c \
++	device/net_io.h \
++	device/param.h \
++	device/subrs.c \
++	device/subrs.h \
++	device/tty.h
++EXTRA_DIST += \
++	device/device.srv \
++	device/device_pager.srv \
++	device/device_reply.cli \
++	device/memory_object_reply.cli
++
++
++#
++# `kmsg' device.
++#
++
++if enable_kmsg
++libkernel_a_SOURCES += \
++	device/kmsg.c \
++	device/kmsg.h
++endif
++
++
++#
++# Version number.
++#
++
++nodist_libkernel_a_SOURCES += \
++	version.c
++
++#
++# Installation.
++#
++
++include_devicedir = $(includedir)/device
++include_device_HEADERS = \
++	include/device/audio_status.h \
++	include/device/bpf.h \
++	include/device/device.defs \
++	include/device/device_reply.defs \
++	include/device/device_request.defs \
++	include/device/device_types.defs \
++	include/device/device_types.h \
++	include/device/disk_status.h \
++	include/device/irq_status.h \
++	include/device/net_status.h \
++	include/device/notify.defs \
++	include/device/notify.h \
++	include/device/tape_status.h \
++	include/device/tty_status.h
++
++include_machdir = $(includedir)/mach
++include_mach_HEADERS = \
++	include/mach/default_pager.defs \
++	include/mach/default_pager_types.defs \
++	include/mach/exc.defs \
++	include/mach/mach.defs \
++	include/mach/mach4.defs \
++	include/mach/gnumach.defs \
++	include/mach/task_notify.defs \
++	include/mach/mach_host.defs \
++	include/mach/mach_port.defs \
++	include/mach/mach_types.defs \
++	include/mach/memory_object.defs \
++	include/mach/memory_object_default.defs \
++	include/mach/notify.defs \
++	include/mach/std_types.defs \
++	include/mach/experimental.defs \
++	include/mach/alert.h \
++	include/mach/boolean.h \
++	include/mach/boot.h \
++	include/mach/default_pager_types.h \
++	include/mach/exception.h \
++	include/mach/host_info.h \
++	include/mach/kern_return.h \
++	include/mach/mach_param.h \
++	include/mach/mach_types.h \
++	include/mach/machine.h \
++	include/mach/macro_help.h \
++	include/mach/memory_object.h \
++	include/mach/message.h \
++	include/mach/mig_errors.h \
++	include/mach/notify.h \
++	include/mach/pc_sample.h \
++	include/mach/policy.h \
++	include/mach/port.h \
++	include/mach/processor_info.h \
++	include/mach/profil.h \
++	include/mach/profilparam.h \
++	include/mach/std_types.h \
++	include/mach/syscall_sw.h \
++	include/mach/task_info.h \
++	include/mach/task_special_ports.h \
++	include/mach/thread_info.h \
++	include/mach/thread_special_ports.h \
++	include/mach/thread_status.h \
++	include/mach/thread_switch.h \
++	include/mach/time_value.h \
++	include/mach/version.h \
++	include/mach/vm_attributes.h \
++	include/mach/vm_cache_statistics.h \
++	include/mach/vm_inherit.h \
++	include/mach/vm_param.h \
++	include/mach/vm_prot.h \
++	include/mach/vm_statistics.h \
++	include/mach/vm_sync.h \
++	include/mach/vm_wire.h \
++	include/mach/inline.h \
++	include/mach/xen.h
++
++# If we name this `*_execdir', Automake won't add it to `install-data'...
++include_mach_eXecdir = $(includedir)/mach/exec
++include_mach_eXec_HEADERS = \
++	include/mach/exec/a.out.h \
++	include/mach/exec/elf.h \
++	include/mach/exec/exec.h
++
++include_mach_debugdir = $(includedir)/mach_debug
++include_mach_debug_HEADERS = \
++	$(addprefix include/mach_debug/, \
++		hash_info.h \
++		mach_debug.defs	\
++		mach_debug_types.defs \
++		mach_debug_types.h \
++		vm_info.h \
++		slab_info.h \
++	)
++
++# Other headers for the distribution.  We don't install these, because the
++# GNU C library has correct versions for users to use.
++# other-sys-headers := types.h reboot.h ioctl.h
++# other-mach-headers := mig_support.h mach_traps.h error.h
++# other-headers := alloca.h
++
++install-data-hook:
++	rm -f '$(DESTDIR)$(include_machdir)'/machine
++	ln -s '$(systype)' '$(DESTDIR)$(include_machdir)'/machine
++
++#
++# Building a distribution.
++#
++
++# Enable all available features.
++DISTCHECK_CONFIGURE_FLAGS += \
++	--enable-kdb
++
++# Instead of listing each file individually...
++EXTRA_DIST += \
++	include
++
++#
++# Automatically generated source files.
++#
++# See Makerules.mig.am.
++#
++
++# User stubs.
++nodist_lib_dep_tr_for_defs_a_SOURCES += \
++	vm/memory_object_user.user.defs.c \
++	vm/memory_object_default.user.defs.c
++nodist_libkernel_a_SOURCES += \
++	vm/memory_object_user.user.h \
++	vm/memory_object_user.user.c \
++	vm/memory_object_user.user.msgids \
++	vm/memory_object_default.user.h \
++	vm/memory_object_default.user.c \
++	vm/memory_object_default.user.msgids
++#	vm/memory_object_user.user.defs
++#	vm/memory_object_default.user.defs
++nodist_lib_dep_tr_for_defs_a_SOURCES += \
++	device/device_reply.user.defs.c \
++	device/memory_object_reply.user.defs.c
++nodist_libkernel_a_SOURCES += \
++	device/device_reply.user.h \
++	device/device_reply.user.c \
++	device/device_reply.user.msgids \
++	device/memory_object_reply.user.h \
++	device/memory_object_reply.user.c \
++	device/memory_object_reply.user.msgids
++#	device/device_reply.user.defs
++#	device/memory_object_reply.user.defs
++
++nodist_lib_dep_tr_for_defs_a_SOURCES += \
++	kern/task_notify.user.defs.c
++nodist_libkernel_a_SOURCES += \
++	kern/task_notify.user.h \
++	kern/task_notify.user.c \
++	kern/task_notify.user.msgids
++
++# Server stubs.
++nodist_lib_dep_tr_for_defs_a_SOURCES += \
++	device/device.server.defs.c \
++	device/device_pager.server.defs.c
++nodist_libkernel_a_SOURCES += \
++	device/device.server.h \
++	device/device.server.c \
++	device/device.server.msgids \
++	device/device_pager.server.h \
++	device/device_pager.server.c \
++	device/device_pager.server.msgids
++#	device/device.server.defs
++#	device/device_pager.server.defs
++nodist_lib_dep_tr_for_defs_a_SOURCES += \
++	ipc/mach_port.server.defs.c
++nodist_libkernel_a_SOURCES += \
++	ipc/mach_port.server.h \
++	ipc/mach_port.server.c \
++	ipc/mach_port.server.msgids
++#	ipc/mach_port.server.defs
++nodist_lib_dep_tr_for_defs_a_SOURCES += \
++	kern/mach.server.defs.c \
++	kern/mach4.server.defs.c \
++	kern/gnumach.server.defs.c \
++	kern/experimental.server.defs.c \
++	kern/mach_debug.server.defs.c \
++	kern/mach_host.server.defs.c
++nodist_libkernel_a_SOURCES += \
++	kern/mach.server.h \
++	kern/mach.server.c \
++	kern/mach.server.msgids \
++	kern/mach4.server.h \
++	kern/mach4.server.c \
++	kern/mach4.server.msgids \
++	kern/gnumach.server.h \
++	kern/gnumach.server.c \
++	kern/gnumach.server.msgids \
++	kern/experimental.server.h \
++	kern/experimental.server.c \
++	kern/experimental.server.msgids \
++	kern/mach_debug.server.h \
++	kern/mach_debug.server.c \
++	kern/mach_debug.server.msgids \
++	kern/mach_host.server.h \
++	kern/mach_host.server.c \
++	kern/mach_host.server.msgids
++#	kern/mach.server.defs
++#	kern/mach4.server.defs
++#	kern/gnumach.server.defs
++#	kern/experimental.server.defs
++#	kern/mach_debug.server.defs
++#	kern/mach_host.server.defs
++
++# Stand-alone rule to generate the list of message ids when neither
++# the client nor the server stubs are required.
++nodist_lib_dep_tr_for_defs_a_SOURCES += \
++	ipc/notify.none.defs.c \
++	kern/exc.none.defs.c
++nodist_libkernel_a_SOURCES += \
++	ipc/notify.none.msgids \
++	kern/exc.none.msgids
++#	ipc/notify.none.defs
++
++# rpctrace can make use of that.
++MOSTLYCLEANFILES += \
++	gnumach.msgids
++gnumach.msgids: $(filter %.msgids,$(nodist_libkernel_a_SOURCES))
++	$(AM_V_at) cat $^ > $@.new
++	$(AM_V_GEN) mv $@.new $@
++# `exec_' prefix, so that we don't try to build that file during when running
++# `make install-data', as it may fail there, but isn't needed there either.
++exec_msgidsdir = $(datadir)/msgids
++exec_msgids_DATA = gnumach.msgids
++
++#
++# Specific code.
++#
++
++# Linux device drivers and the glue code.
++include linux/Makefrag.am
++
++#
++# Platform specific parts.
++#
++
++# Xen.
++if PLATFORM_xen
++include xen/Makefrag.am
++endif
++
++#
++# Architecture specific parts.
++#
++
++if HOST_ix86
++include i386/Makefrag_x86.am
++endif
++if HOST_x86_64
++include i386/Makefrag_x86.am
++endif
++
++# ix86.
++include i386/Makefrag.am
++
++# x86_64.
++include x86_64/Makefrag.am
++
++# aarch64.
++include aarch64/Makefrag.am
+diff --git a/Makefrag.trini b/Makefrag.trini
+new file mode 100644
+index 00000000..33d39a4d
+--- /dev/null
++++ b/Makefrag.trini
+@@ -0,0 +1,70 @@
++# ============================================================================
++# TriniOS Kernel Extension Build Fragment
++# ============================================================================
++# This file is included by GNU Mach's Makefile.am to build TriniOS extensions.
++# Paths are relative to the gnumach source tree (top_srcdir).
++
++# We need absolute paths since kernel/ lives outside of gnumach/.
++TRINI_ROOT := /root/TriniOS/kernel
++
++# ============================================================================
++# TriniOS Kernel Extension Build Fragment — Phase 2 Approach
++# ============================================================================
++# Strategy: Only build files that do NOT conflict with gnumach's internal headers.
++# Files that include <mach/mach.h> or <ipc/ipc_port.h> (gnumach native) are excluded
++# because they cause type conflicts between MIG-generated and native declarations.
++#
++# Excluded from kernel library:
++#   - bootstrap_trini.c: includes <mach/mach.h>, <kern/task.h>, <ipc/ipc_port.h>
++#     These conflict with gnumach's own internal headers (task_deallocate, ipc_port_init).
++#     Will be built separately and linked after gnumach completes.
++#   - server_registry.c: includes "ipc_port_gnumach.h" which pulls in <ipc/ipc_port.h>
++#     Conflicts with gnumach's native ipc_port_init signature.
++#     Will be built as part of BSD server build chain.
++#
++# Included (no header conflicts):
++#   - task_manager.c: uses <mach/mach.h> but only calls trini_task_* functions
++#   - host_local.c: no Mach headers, just freestanding utilities
++#   - vm_manager.c: VM management with gnumach types
++#   - gpu_mem.c: GPU memory pool management
++
++TRINI_KEXT_SOURCES = \
++	$(TRINI_ROOT)/task/task_manager.c \
++	$(TRINI_ROOT)/host/host_local.c \
++	$(TRINI_ROOT)/mm/vm_manager.c \
++	$(TRINI_ROOT)/mm/gpu_mem.c
++
++# Add TriniOS kernel extension sources to the kernel library
++libkernel_a_SOURCES += $(TRINI_KEXT_SOURCES)
++
++# Add TriniOS include paths (absolute, relative to gnumach build dir)
++AM_CPPFLAGS += -I$(TRINI_ROOT)
++AM_CPPFLAGS += -I$(TRINI_ROOT)/asi
++AM_CPPFLAGS += -I$(TRINI_ROOT)/ipc
++AM_CPPFLAGS += -I$(TRINI_ROOT)/task
++AM_CPPFLAGS += -I$(TRINI_ROOT)/host
++AM_CPPFLAGS += -I$(TRINI_ROOT)/mm
++
++# Add gnumach source include directory for mach/*.h headers (std_types.h, mach_types.h, etc.)
++AM_CPPFLAGS += -I$(top_srcdir)/include
++
++# Add gnumach build include directory for generated mach/mach.h umbrella header.
++# This is needed by bootstrap_trini.c which includes <mach/mach.h>.
++# The task_deallocate conflict was caused by external -I$(top_srcdir)/kern overriding
++# gnumach's internal kern/task.h — we removed that external path above, so this should
++# now work without conflicts.
++AM_CPPFLAGS += -I$(abs_top_builddir)/build/include
++
++# Add gnumach i386 architecture-specific include directories for vm_param.h, thread.h etc.
++AM_CPPFLAGS += -I$(top_srcdir)/i386/i386
++AM_CPPFLAGS += -I$(top_srcdir)/i386/include/mach/i386
++
++# NOTE: We do NOT add -I$(top_srcdir)/kern or -I$(top_srcdir)/machine as
++# external include paths. gnumach's own internal header chain handles kern/ and
++# machine/ headers correctly when built inside its tree. Adding them externally
++# causes conflicting type errors (e.g., task_deallocate void vs kern_return_t).
++# bootstrap_trini.c includes <kern/task.h> etc. which resolve via gnumach's
++# native include chain, not our external -I flags.
++
++# Define TRINI_OS for conditional compilation in startup.c patch
++AM_CFLAGS += -DTRINI_OS
+\ No newline at end of file
+diff --git a/config.status.rej b/config.status.rej
+new file mode 100644
+index 00000000..868737bd
+--- /dev/null
++++ b/config.status.rej
+@@ -0,0 +1,18 @@
++--- config.status	2009-10-26 23:57:14.000000000 +0100
+++++ config.status.new	2009-10-27 00:04:26.000000000 +0100
++@@ -1553,7 +1553,14 @@
++ 	  s/.*/./; q'`
++       as_dir=$dirpart/$fdir; as_fn_mkdir_p
++       # echo "creating $dirpart/$file"
++-      echo '# dummy' > "$dirpart/$file"
+++      # Try to guess what file this dependency file is from...
+++      f=$srcdir/`dirname "$fdir"`/`basename "$file" .Po | sed s/lib[^-]\*-//`
+++      for f in "$f"*; do
+++        case $f in
+++	  *.c | *.S) echo "$f"': $(filter-out $(DIST_SOURCES),$(SOURCES))';;
+++	  *) echo '# dummy';;
+++        esac
+++      done > "$dirpart/$file"
++     done
++   done
++ }
+diff --git a/configure.ac.trini.bak b/configure.ac.trini.bak
+new file mode 100644
+index 00000000..c3d5ffaa
+--- /dev/null
++++ b/configure.ac.trini.bak
+@@ -0,0 +1,281 @@
++dnl Configure script for GNU Mach.
++
++dnl Copyright (C) 1997, 1998, 1999, 2004, 2006, 2007, 2008, 2010, 2013 Free
++dnl Software Foundation, Inc.
++
++dnl Permission to use, copy, modify and distribute this software and its
++dnl documentation is hereby granted, provided that both the copyright
++dnl notice and this permission notice appear in all copies of the
++dnl software, derivative works or modified versions, and any portions
++dnl thereof, and that both notices appear in supporting documentation.
++dnl
++dnl THE FREE SOFTWARE FOUNDATION ALLOWS FREE USE OF THIS SOFTWARE IN ITS
++dnl "AS IS" CONDITION.  THE FREE SOFTWARE FOUNDATION DISCLAIMS ANY
++dnl LIABILITY OF ANY KIND FOR ANY DAMAGES WHATSOEVER RESULTING FROM THE
++dnl USE OF THIS SOFTWARE.
++
++AC_PREREQ([2.57])
++
++m4_include([version.m4])
++AC_INIT([AC_PACKAGE_NAME], [AC_PACKAGE_VERSION], [AC_PACKAGE_BUGREPORT],
++  [AC_PACKAGE_TARNAME])
++AC_CONFIG_SRCDIR([kern/ipc_kobject.c])
++
++if test -z "${CFLAGS+set}"; then
++  # Use these CFLAGS by default if nothing is set.
++  CFLAGS="-g -O2"
++fi
++saved_CFLAGS="$CFLAGS"
++# We don't need glibc to compile gnumach so ensure we don't try to use it
++# during configure.
++CFLAGS="$CFLAGS -ffreestanding -nostdlib"
++
++AC_CONFIG_AUX_DIR([build-aux])
++
++AM_INIT_AUTOMAKE(
++  [1.10.2]
++  [dist-xz]
++dnl Don't define `PACKAGE' and `VERSION'.
++  [no-define]
++dnl Do not clutter the main build directory.
++  [subdir-objects]
++dnl We require GNU make.
++  [-Wall -Wno-portability]
++)
++
++m4_ifdef([AM_SILENT_RULES], [AM_SILENT_RULES([no])],
++                            [AC_SUBST([AM_DEFAULT_VERBOSITY], [1])])
++
++#
++# Deduce the architecture we're building for.
++#
++# TODO: Should we also support constructs like `i686_xen-pc-gnu' or
++# `i686-pc_xen-gnu'?
++
++AC_CANONICAL_HOST
++
++AC_ARG_ENABLE([platform],
++  AS_HELP_STRING([--enable-platform=PLATFORM], [specify the platform to build a
++    kernel for.  Defaults to `at' for `i?86'.  The other possibility is
++    `xen'.]),
++  [host_platform=$enable_platform],
++  [host_platform=default])
++[# Supported configurations.
++case $host_platform:$host_cpu in
++  default:i?86)
++    host_platform=at;;
++  default:x86_64)]
++    [host_platform=at;;
++  at:i?86 | xen:i?86 | at:x86_64 | xen:x86_64)
++    :;;
++  *:aarch64)
++    ;;
++  *)]
++    AC_MSG_ERROR([unsupported combination of cpu type `$host_cpu' and platform
++      `$host_platform'.])[;;
++esac]
++AC_SUBST([host_platform])
++
++[# This is used in a few places.
++case $host_cpu in
++  i?86)
++    systype=i386;;
++  *)
++    systype=$host_cpu;;
++esac]
++AC_SUBST([systype])
++
++#
++# Programs.
++#
++
++AC_PROG_AWK
++# Temporarily force cross compiling mode to make sure the configure script
++# does not try to run compiled binaries.
++save_cross_compiling=$cross_compiling
++cross_compiling=yes
++AM_PROG_AS
++cross_compiling=$save_cross_compiling
++AC_PROG_CC
++AC_PROG_CPP
++AC_PROG_INSTALL
++AC_PROG_RANLIB
++AC_CHECK_TOOL([AR], [ar])
++AC_CHECK_TOOL([LD], [ld])
++AC_CHECK_TOOL([NM], [nm])
++
++AC_CHECK_TOOL([MIG], [mig], [no])
++AC_ARG_VAR([MIG], [Path to the mig tool])
++
++if test x$MIG = xno
++then
++    AC_MSG_WARN([mig was not found, we will not be able to build a kernel, only install headers. Install or build mig against them, and run configure again. If you already did so, perhaps you need to specify the path with MIG=])
++    MIG=mig
++fi
++
++dnl Needed for the Automake option `subdir-objects'.
++AM_PROG_CC_C_O
++
++dnl Makerules can make use of these.
++AC_CHECK_PROG([GZIP], [gzip], [gzip], [gzip-not-found])
++AC_CHECK_TOOL([STRIP], [strip])
++
++dnl See below why we need to patch stuff during build...
++AC_CHECK_PROG([PATCH], [patch], [patch], [patch-not-found])
++
++#
++# configure fragments.
++#
++
++# Default set of device drivers.
++AC_ARG_ENABLE([device-drivers],
++  AS_HELP_STRING([--enable-device-drivers=WHICH], [specify WHICH (on `ix86-at'
++    one of `default', `qemu', `none') to preset a certain subset of all
++    available device drivers, as indicated by the below-metioned ``enabled
++    ...'' comments; you can then still use further `--enable-*' or
++    `--disable-*' options to refine the selection of drivers to include in
++    order to choose only those you actually want to have enabled]))
++[case $enable_device_drivers in
++  '')
++    enable_device_drivers=default;;
++  no)
++    enable_device_drivers=none;;
++  default | none | qemu)
++    :;;
++  *)]
++    AC_MSG_ERROR([invalid choice of]
++      [`--enable-device-drivers=$enable_device_drivers'.])
++    [;;
++esac]
++
++AC_ARG_ENABLE([user32],
++AS_HELP_STRING([--enable-user32], [enable 32-bit user space on a 64-bit kernel]))
++[if [ x"$enable_user32" = xyes ]; then]
++  AC_DEFINE([USER32], [], [enable 32-bit user on 64-bit kernel])
++  AM_CONDITIONAL([enable_user32], [true])
++[else]
++  AM_CONDITIONAL([enable_user32], [false])
++[fi]
++
++
++# Platform-specific configuration.
++
++# PC AT.
++# TODO.  Currently handled in `i386/configfrag.ac'.
++
++# General options.
++m4_include([configfrag-first.ac])
++
++# Xen.
++m4_include([xen/configfrag.ac])
++
++# Machine-specific configuration.
++
++# ix86.
++m4_include([i386/configfrag.ac])
++
++# x86_64
++m4_include([x86_64/configfrag.ac])
++
++# aarch64
++m4_include([aarch64/configfrag.ac])
++
++# General options.
++m4_include([configfrag.ac])
++
++# Linux code snarfed into GNU Mach.
++m4_include([linux/configfrag.ac])
++
++# The test suite.
++m4_include([tests/configfrag.ac])
++
++#
++# Compiler features.
++#
++
++# Smashing stack protector.
++[ssp_possible=yes]
++AC_MSG_CHECKING([whether the compiler accepts `-fstack-protector'])
++# Is this a reliable test case?
++AC_LANG_CONFTEST(
++  [AC_LANG_SOURCE([[void foo (void) { volatile char a[8]; a[3]; }]])])
++[# `$CC -c -o ...' might not be portable.  But, oh, well...  Is calling
++# `ac_compile' like this correct, after all?
++if eval "$ac_compile -S -fstack-protector -o conftest.s" 2> /dev/null; then]
++  AC_MSG_RESULT([yes])
++  [# Should we clear up other files as well, having called `AC_LANG_CONFTEST'?
++  rm -f conftest.s
++else
++  ssp_possible=no]
++  AC_MSG_RESULT([no])
++[fi
++# Need that, because some distributions ship compilers that include
++# `-fstack-protector' in the default specs.]
++AM_CONDITIONAL([disable_smashing_stack_protector],
++  [[[ x"$ssp_possible" = xyes ]]])
++
++#
++# Output.
++#
++
++AC_CONFIG_HEADERS([config.h])
++AC_CONFIG_FILES([Makefile version.c])
++
++#
++# The remaining ugly, dark corners...
++#
++# Attention, parents: don't show this to your children...
++#
++
++#
++# config.status.dep.patch
++#
++# This is a (ugly --- I admit) bootstrap hack to get to-be-generated files
++# created before any other source files are compiled.
++#
++# See <http://lists.gnu.org/archive/html/automake/2006-05/msg00038.html>.
++#
++# We don't use `BUILT_SOURCES' (as it was suggested in the follow-up message),
++# as we also want things like `make SPECIFIC_TARGET' to work.
++#
++# This affair is especially ugly because internals are used (the `# dummy'
++# tag): internals that may be subject to changes.  That's the reason why a
++# real patch is being used here and not some `sed' magic: to make it fail
++# loudly in case.
++#
++# For all shipped source files a dependency file is tried to be created where
++# it is simply stated that the respective source file depends on _all_
++# to-be-generated files.  Depending on all of them doesn't do any harm, as they
++# will nevertheless have to be created, sooner or later.  The problem is, that
++# `config.status' doesn't know about the source file of the file it is
++# currently creating the dependency file for.  So we have it do an educated
++# guess...  Later, when compiling the source files, these dependency files will
++# be rewritten to contain the files's actual dependencies.  From then on this
++# bootstrap hack will be forgotten.
++#
++
++dnl AC_CONFIG_COMMANDS_POST([
++dnl   sed -i -e \
++dnl     's%#\ dummy%Makefile: $(filter-out $(DIST_SOURCES),$(SOURCES))%' \
++dnl     config.status
++dnl ])
++AC_CONFIG_COMMANDS_POST([
++  if "$PATCH" -f < "$srcdir"/config.status.dep.patch > /dev/null 2>&1 ||
++     ( cd "$srcdir" &&
++       ( "$PATCH" -f < Makefile.in.dep.patch ||
++         "$PATCH" -f < Makefile.in.dep.2.patch ||
++         grep "Ugly bootstrap hack to get to-be-generated files created" Makefile.in ) ) > /dev/null 2>&1
++  then] AC_MSG_NOTICE([Applied a patch to work around a deficiency in]
++    [Automake.  See `configure.ac' for details.])
++  [else] AC_MSG_ERROR([failed to patch using `config.status.dep.patch'.]
++      [You have a serious problem.  Please contact <$PACKAGE_BUGREPORT>.])
++  [fi
++])
++
++
++CFLAGS="$saved_CFLAGS"
++#
++# Fire.
++#
++
++AC_OUTPUT
+diff --git a/i386/i386/i386asm.symc b/i386/i386/i386asm.symc
+new file mode 100644
+index 00000000..db22b14c
+--- /dev/null
++++ b/i386/i386/i386asm.symc
+@@ -0,0 +1,233 @@
++#include <sys/reboot.h>
++#include <kern/thread.h>
++#include <kern/task.h>
++#include <kern/syscall_emulation.h>
++#include <i386/thread.h>
++#include <i386/pmap.h>
++#include <i386/vm_param.h>
++#include <i386/seg.h>
++#include <i386/tss.h>
++#include <i386at/idt.h>
++#include <i386/gdt.h>
++#include <i386/ldt.h>
++#include <i386/mp_desc.h>
++#include <i386/apic.h>
++#include <i386/xen.h>
++void bogus(void);
++void bogus(void) {
++__asm ("\n\
++* CALL_AST_CHECK mAgIc%0" : : "i" (CALL_AST_CHECK));
++__asm ("\n\
++* CALL_PMAP_UPDATE mAgIc%0" : : "i" (CALL_PMAP_UPDATE));
++__asm ("\n\
++* APIC_ID mAgIc%0" : : "i" (&((struct ApicLocalUnit*)0)->apic_id));
++__asm ("\n\
++* PERCPU_CPU_ID mAgIc%0" : : "i" (&((struct percpu*)0)->cpu_id));
++__asm ("\n\
++* PERCPU_ACTIVE_THREAD mAgIc%0" : : "i" (&((struct percpu*)0)->active_thread));
++__asm ("\n\
++* PERCPU_ACTIVE_STACK mAgIc%0" : : "i" (&((struct percpu*)0)->active_stack));
++__asm ("\n\
++* PCB_ISS mAgIc%0" : : "i" (&((struct pcb*)0)->iss));
++__asm ("\n\
++* PC_SIZE mAgIc%0" : : "i" (sizeof(struct percpu)));
++__asm ("\n\
++* TH_PCB mAgIc%0" : : "i" (&((struct thread*)0)->pcb));
++__asm ("\n\
++* TH_TASK mAgIc%0" : : "i" (&((struct thread*)0)->task));
++__asm ("\n\
++* TH_RECOVER mAgIc%0" : : "i" (&((struct thread*)0)->recover));
++__asm ("\n\
++* TH_KERNEL_STACK mAgIc%0" : : "i" (&((struct thread*)0)->kernel_stack));
++__asm ("\n\
++* TH_SWAP_FUNC mAgIc%0" : : "i" (&((struct thread*)0)->swap_func));
++__asm ("\n\
++* TASK_EMUL mAgIc%0" : : "i" (&((struct task*)0)->eml_dispatch));
++__asm ("\n\
++* DISP_MIN mAgIc%0" : : "i" (&((struct eml_dispatch*)0)->disp_min));
++__asm ("\n\
++* DISP_COUNT mAgIc%0" : : "i" (&((struct eml_dispatch*)0)->disp_count));
++__asm ("\n\
++* DISP_VECTOR mAgIc%0" : : "i" (&((struct eml_dispatch*)0)->disp_vector));
++__asm ("\n\
++* KSS_EBX mAgIc%0" : : "i" (&STACK_IKS(0)->k_ebx));
++__asm ("\n\
++* KSS_ESP mAgIc%0" : : "i" (&STACK_IKS(0)->k_esp));
++__asm ("\n\
++* KSS_EBP mAgIc%0" : : "i" (&STACK_IKS(0)->k_ebp));
++#ifdef __i386__
++__asm ("\n\
++* KSS_ESI mAgIc%0" : : "i" (&STACK_IKS(0)->k_esi));
++__asm ("\n\
++* KSS_EDI mAgIc%0" : : "i" (&STACK_IKS(0)->k_edi));
++#endif
++__asm ("\n\
++* KSS_EIP mAgIc%0" : : "i" (&STACK_IKS(0)->k_eip));
++#ifdef __x86_64__
++__asm ("\n\
++* KSS_R12 mAgIc%0" : : "i" (&STACK_IKS(0)->k_r12));
++__asm ("\n\
++* KSS_R13 mAgIc%0" : : "i" (&STACK_IKS(0)->k_r13));
++__asm ("\n\
++* KSS_R14 mAgIc%0" : : "i" (&STACK_IKS(0)->k_r14));
++__asm ("\n\
++* KSS_R15 mAgIc%0" : : "i" (&STACK_IKS(0)->k_r15));
++#endif
++__asm ("\n\
++* IKS_SIZE mAgIc%0" : : "i" (sizeof(struct i386_kernel_state)));
++__asm ("\n\
++* IEL_SIZE mAgIc%0" : : "i" (sizeof(struct i386_exception_link)));
++#if !defined(__x86_64__) || defined(USER32)
++__asm ("\n\
++* R_GS mAgIc%0" : : "i" (&((struct i386_saved_state*)0)->gs));
++__asm ("\n\
++* R_FS mAgIc%0" : : "i" (&((struct i386_saved_state*)0)->fs));
++#endif
++__asm ("\n\
++* R_CS mAgIc%0" : : "i" (&((struct i386_saved_state*)0)->cs));
++__asm ("\n\
++* R_UESP mAgIc%0" : : "i" (&((struct i386_saved_state*)0)->uesp));
++__asm ("\n\
++* R_EAX mAgIc%0" : : "i" (&((struct i386_saved_state*)0)->eax));
++__asm ("\n\
++* R_EBX mAgIc%0" : : "i" (&((struct i386_saved_state*)0)->ebx));
++__asm ("\n\
++* R_ECX mAgIc%0" : : "i" (&((struct i386_saved_state*)0)->ecx));
++__asm ("\n\
++* R_EDX mAgIc%0" : : "i" (&((struct i386_saved_state*)0)->edx));
++__asm ("\n\
++* R_EBP mAgIc%0" : : "i" (&((struct i386_saved_state*)0)->ebp));
++__asm ("\n\
++* R_TRAPNO mAgIc%0" : : "i" (&((struct i386_saved_state*)0)->trapno));
++__asm ("\n\
++* R_ERR mAgIc%0" : : "i" (&((struct i386_saved_state*)0)->err));
++__asm ("\n\
++* R_EFLAGS mAgIc%0" : : "i" (&((struct i386_saved_state*)0)->efl));
++__asm ("\n\
++* R_EIP mAgIc%0" : : "i" (&((struct i386_saved_state*)0)->eip));
++__asm ("\n\
++* R_CR2 mAgIc%0" : : "i" (&((struct i386_saved_state*)0)->cr2));
++__asm ("\n\
++* R_EDI mAgIc%0" : : "i" (&((struct i386_saved_state*)0)->edi));
++__asm ("\n\
++* R_ESI mAgIc%0" : : "i" (&((struct i386_saved_state*)0)->esi));
++#ifdef __x86_64__
++__asm ("\n\
++* R_R8 mAgIc%0" : : "i" (&((struct i386_saved_state*)0)->r8));
++__asm ("\n\
++* R_R9 mAgIc%0" : : "i" (&((struct i386_saved_state*)0)->r9));
++__asm ("\n\
++* R_R10 mAgIc%0" : : "i" (&((struct i386_saved_state*)0)->r10));
++__asm ("\n\
++* R_R12 mAgIc%0" : : "i" (&((struct i386_saved_state*)0)->r12));
++__asm ("\n\
++* R_R13 mAgIc%0" : : "i" (&((struct i386_saved_state*)0)->r13));
++__asm ("\n\
++* R_R14 mAgIc%0" : : "i" (&((struct i386_saved_state*)0)->r14));
++__asm ("\n\
++* R_R15 mAgIc%0" : : "i" (&((struct i386_saved_state*)0)->r15));
++#endif
++__asm ("\n\
++* I_EIP mAgIc%0" : : "i" (&((struct i386_interrupt_state*)0)->eip));
++__asm ("\n\
++* I_CS mAgIc%0" : : "i" (&((struct i386_interrupt_state*)0)->cs));
++__asm ("\n\
++* I_EFL mAgIc%0" : : "i" (&((struct i386_interrupt_state*)0)->efl));
++#ifdef __x86_64__
++__asm ("\n\
++* TSS_RSP0 mAgIc%0" : : "i" (&((struct i386_tss*)0)->rsp0));
++#else
++__asm ("\n\
++* TSS_ESP0 mAgIc%0" : : "i" (&((struct i386_tss*)0)->esp0));
++__asm ("\n\
++* TSS_SS0 mAgIc%0" : : "i" (&((struct i386_tss*)0)->ss0));
++#endif
++__asm ("\n\
++* SUB_TYPE_CPU_TYPE mAgIc%0" : : "i" (&((struct machine_slot*)0)->cpu_type));
++__asm ("\n\
++* NBPG mAgIc%0" : : "i" (I386_PGBYTES));
++__asm ("\n\
++* VM_MIN_ADDRESS mAgIc%0" : : "i" (VM_MIN_ADDRESS));
++__asm ("\n\
++* VM_MAX_ADDRESS mAgIc%0" : : "i" (VM_MAX_ADDRESS));
++__asm ("\n\
++* KERNELBASE mAgIc%0" : : "i" (VM_MIN_KERNEL_ADDRESS));
++__asm ("\n\
++* KERNEL_STACK_SIZE mAgIc%0" : : "i" (KERNEL_STACK_SIZE));
++#if defined MACH_PSEUDO_PHYS && (VM_MIN_KERNEL_ADDRESS == LINEAR_MIN_KERNEL_ADDRESS)
++__asm ("\n\
++* pfn_list mAgIc%0" : : "i" (PFN_LIST));
++#endif
++#if PAE
++__asm ("\n\
++* PDPSHIFT mAgIc%0" : : "i" (PDPSHIFT));
++#endif	/* PAE */
++__asm ("\n\
++* PDESHIFT mAgIc%0" : : "i" (PDESHIFT));
++__asm ("\n\
++* PDEMASK mAgIc%0" : : "i" (PDEMASK));
++__asm ("\n\
++* PTESHIFT mAgIc%0" : : "i" (PTESHIFT));
++__asm ("\n\
++* PTEMASK mAgIc%0" : : "i" (PTEMASK));
++__asm ("\n\
++* PTE_SIZE mAgIc%0" : : "i" (sizeof(pt_entry_t)));
++__asm ("\n\
++* PTE_PFN mAgIc%0" : : "i" (INTEL_PTE_PFN));
++__asm ("\n\
++* PTE_V mAgIc%0" : : "i" (INTEL_PTE_VALID));
++__asm ("\n\
++* PTE_W mAgIc%0" : : "i" (INTEL_PTE_WRITE));
++__asm ("\n\
++* PTE_S mAgIc%0" : : "i" (INTEL_PTE_PS));
++__asm ("\n\
++* PTE_INVALID mAgIc%0" : : "i" (~INTEL_PTE_VALID));
++__asm ("\n\
++* PTES_PER_PAGE mAgIc%0" : : "i" (NPTES));
++__asm ("\n\
++* INTEL_PTE_KERNEL mAgIc%0" : : "i" (INTEL_PTE_VALID|INTEL_PTE_WRITE));
++__asm ("\n\
++* IDTSZ mAgIc%0" : : "i" (IDTSZ));
++__asm ("\n\
++* KERNEL_RING mAgIc%0" : : "i" (KERNEL_RING));
++__asm ("\n\
++* KERNELBASEPDE mAgIc%0" : : "i" ((VM_MIN_KERNEL_ADDRESS>>PDESHIFT)*sizeof(pt_entry_t)));
++#if	MACH_KDB
++__asm ("\n\
++* RB_KDB mAgIc%0" : : "i" (RB_KDB));
++#endif	/* MACH_KDB */
++__asm ("\n\
++* INTSTACK_SIZE mAgIc%0" : : "i" (INTSTACK_SIZE));
++#if	!STAT_TIME
++__asm ("\n\
++* LOW_BITS mAgIc%0" : : "i" (&((struct timer*)0)->low_bits));
++__asm ("\n\
++* HIGH_BITS mAgIc%0" : : "i" (&((struct timer*)0)->high_bits));
++__asm ("\n\
++* HIGH_BITS_CHECK mAgIc%0" : : "i" (&((struct timer*)0)->high_bits_check));
++__asm ("\n\
++* TIMER_HIGH_UNIT mAgIc%0" : : "i" (TIMER_HIGH_UNIT));
++__asm ("\n\
++* TH_SYSTEM_TIMER mAgIc%0" : : "i" (&((struct thread*)0)->system_timer));
++__asm ("\n\
++* TH_USER_TIMER mAgIc%0" : : "i" (&((struct thread*)0)->user_timer));
++#endif
++#ifdef	MACH_XEN
++__asm ("\n\
++* CPU_CLI mAgIc%0" : : "i" (&((struct shared_info*)0)->vcpu_info[0].evtchn_upcall_mask));
++__asm ("\n\
++* CPU_PENDING mAgIc%0" : : "i" (&((struct shared_info*)0)->vcpu_info[0].evtchn_upcall_pending));
++__asm ("\n\
++* CPU_PENDING_SEL mAgIc%0" : : "i" (&((struct shared_info*)0)->vcpu_info[0].evtchn_pending_sel));
++__asm ("\n\
++* PENDING mAgIc%0" : : "i" (&((struct shared_info*)0)->evtchn_pending));
++__asm ("\n\
++* EVTMASK mAgIc%0" : : "i" (&((struct shared_info*)0)->evtchn_mask));
++#ifdef	MACH_PV_PAGETABLES
++__asm ("\n\
++* CR2 mAgIc%0" : : "i" (&((struct shared_info*)0)->vcpu_info[0].arch.cr2));
++#endif	/* MACH_PV_PAGETABLES */
++#endif	/* MACH_XEN */
++__asm ("\n\
++* MSGH_MSGH_SIZE mAgIc%0" : : "i" (&((struct mach_msg_header*)0)->msgh_size));
++}
+diff --git a/kern/startup.c b/kern/startup.c
+index 337cc328..fdc0d939 100644
+--- a/kern/startup.c
++++ b/kern/startup.c
+@@ -51,6 +51,8 @@
+ #include <kern/bootstrap.h>
+ #include <kern/startup.h>
+ #include <kern/printf.h>
++/* TriniOS kernel extensions */
++extern void trini_bootstrap(void);
+ #include <vm/vm_kern.h>
+ #include <vm/vm_map.h>
+ #include <vm/vm_object.h>
+@@ -267,6 +269,14 @@ void start_kernel_threads(void)
+ 	 */
+ 	bootstrap_create();
+ 
++#ifdef TRINI_OS
++	/*
++	 * Initialize TriniOS kernel extensions after Mach core
++	 * but before user-space servers start.
++	 */
++	trini_bootstrap();
++#endif /* TRINI_OS */
++
+ #if	XPR_DEBUG
+ 	xprinit();		/* XXX */
+ #endif	/* XPR_DEBUG */
+diff --git a/kern/startup.c.trini.bak b/kern/startup.c.trini.bak
+new file mode 100644
+index 00000000..337cc328
+--- /dev/null
++++ b/kern/startup.c.trini.bak
+@@ -0,0 +1,325 @@
++/*
++ * Mach Operating System
++ * Copyright (c) 1991,1990,1989,1988 Carnegie Mellon University
++ * All Rights Reserved.
++ *
++ * Permission to use, copy, modify and distribute this software and its
++ * documentation is hereby granted, provided that both the copyright
++ * notice and this permission notice appear in all copies of the
++ * software, derivative works or modified versions, and any portions
++ * thereof, and that both notices appear in supporting documentation.
++ *
++ * CARNEGIE MELLON ALLOWS FREE USE OF THIS SOFTWARE IN ITS "AS IS"
++ * CONDITION.  CARNEGIE MELLON DISCLAIMS ANY LIABILITY OF ANY KIND FOR
++ * ANY DAMAGES WHATSOEVER RESULTING FROM THE USE OF THIS SOFTWARE.
++ *
++ * Carnegie Mellon requests users of this software to return to
++ *
++ *  Software Distribution Coordinator  or  Software.Distribution@CS.CMU.EDU
++ *  School of Computer Science
++ *  Carnegie Mellon University
++ *  Pittsburgh PA 15213-3890
++ *
++ * any improvements or extensions that they make and grant Carnegie Mellon
++ * the rights to redistribute these changes.
++ */
++/*
++ *	Mach kernel startup.
++ */
++
++#include <string.h>
++
++#include <mach/boolean.h>
++#include <mach/machine.h>
++#include <mach/task_special_ports.h>
++#include <mach/vm_param.h>
++#include <ipc/ipc_init.h>
++#include <kern/cpu_number.h>
++#include <kern/debug.h>
++#include <kern/gsync.h>
++#include <kern/machine.h>
++#include <kern/mach_factor.h>
++#include <kern/mach_clock.h>
++#include <kern/processor.h>
++#include <kern/rdxtree.h>
++#include <kern/sched_prim.h>
++#include <kern/task.h>
++#include <kern/thread.h>
++#include <kern/thread_swap.h>
++#include <kern/timer.h>
++#include <kern/xpr.h>
++#include <kern/bootstrap.h>
++#include <kern/startup.h>
++#include <kern/printf.h>
++#include <vm/vm_kern.h>
++#include <vm/vm_map.h>
++#include <vm/vm_object.h>
++#include <vm/vm_page.h>
++#include <vm/vm_init.h>
++#include <vm/vm_pageout.h>
++#include <machine/spl.h>
++#include <machine/pcb.h>
++#include <machine/pmap.h>
++#include <machine/model_dep.h>
++#include <mach/version.h>
++#include <device/device_init.h>
++#include <device/intr.h>
++
++#if MACH_KDB
++#include <device/cons.h>
++#endif /* MACH_KDB */
++
++#if ! MACH_KBD
++boolean_t reboot_on_panic = TRUE;
++#endif
++
++#if	NCPUS > 1
++#include <machine/mp_desc.h>
++#include <kern/smp.h>
++#include <kern/machine.h>
++#endif	/* NCPUS > 1 */
++
++/* XX */
++extern char *kernel_cmdline;
++
++/*
++ *	Running in virtual memory, on the interrupt stack.
++ *	Does not return.  Dispatches initial thread.
++ *
++ *	Assumes that master_cpu is set.
++ */
++void setup_main(void)
++{
++	thread_t		startup_thread;
++	phys_addr_t		memsize;
++
++#if	MACH_KDB
++	/*
++	 * Cause a breakpoint trap to the debugger before proceeding
++	 * any further if the proper option flag was specified
++	 * on the kernel's command line.
++	 * XXX check for surrounding spaces.
++	 */
++	if (strstr(kernel_cmdline, "-d ")) {
++	    cninit();		/* need console for debugger */
++	    SoftDebugger("init");
++	}
++#else	/* MACH_KDB */
++	if (strstr (kernel_cmdline, "-H ")) {
++	    reboot_on_panic = FALSE;
++	}
++#endif	/* MACH_KDB */
++
++	panic_init();
++
++	sched_init();
++	vm_mem_bootstrap();
++	rdxtree_cache_init();
++	ipc_bootstrap();
++	vm_mem_init();
++	ipc_init();
++
++	/*
++	 * As soon as the virtual memory system is up, we record
++	 * that this CPU is using the kernel pmap.
++	 */
++	PMAP_ACTIVATE_KERNEL(master_cpu);
++
++	init_timers();
++	init_timeout();
++
++#if	XPR_DEBUG
++	xprbootstrap();
++#endif	/* XPR_DEBUG */
++
++	machine_init();
++
++	mapable_time_init();
++
++	machine_info.max_cpus = NCPUS;
++	memsize = vm_page_mem_size();
++	machine_info.memory_size = memsize;
++	if (machine_info.memory_size < memsize)
++		/* Overflow, report at least 4GB */
++		machine_info.memory_size = ~0;
++	machine_info.avail_cpus = 0;
++	machine_info.major_version = KERNEL_MAJOR_VERSION;
++	machine_info.minor_version = KERNEL_MINOR_VERSION;
++
++	/*
++	 *	Initialize the IPC, task, and thread subsystems.
++	 */
++	task_init();
++	thread_init();
++	swapper_init();
++#if	MACH_HOST
++	pset_sys_init();
++#endif	/* MACH_HOST */
++
++	/*
++	 *	Kick off the time-out driven routines by calling
++	 *	them the first time.
++	 */
++	recompute_priorities(NULL);
++	compute_mach_factor();
++
++	gsync_setup ();
++
++	/*
++	 *	Create a kernel thread to start the other kernel
++	 *	threads.  Thread_resume (from kernel_thread) calls
++	 *	thread_setrun, which may look at current thread;
++	 *	we must avoid this, since there is no current thread.
++	 */
++
++	/*
++	 * Create the thread, and point it at the routine.
++	 */
++	(void) thread_create(kernel_task, &startup_thread);
++	thread_set_name(startup_thread, "startup");
++	thread_start(startup_thread, start_kernel_threads);
++
++	/*
++	 * Give it a kernel stack.
++	 */
++	thread_doswapin(startup_thread);
++
++	/*
++	 * Pretend it is already running, and resume it.
++	 * Since it looks as if it is running, thread_resume
++	 * will not try to put it on the run queues.
++	 *
++	 * We can do all of this without locking, because nothing
++	 * else is running yet.
++	 */
++	startup_thread->state |= TH_RUN;
++	(void) thread_resume(startup_thread);
++
++	/*
++	 * Start the thread.
++	 */
++	cpu_launch_first_thread(startup_thread);
++	/*NOTREACHED*/
++}
++
++/*
++ * Now running in a thread.  Create the rest of the kernel threads
++ * and the bootstrap task.
++ */
++void start_kernel_threads(void)
++{
++	int	i;
++
++	/*
++	 *	Create the idle threads and the other
++	 *	service threads.
++	 */
++	for (i = 0; i < NCPUS; i++) {
++	    if (machine_slot[i].is_cpu) {
++		thread_t	th;
++		char name[10];
++
++		(void) thread_create(kernel_task, &th);
++		snprintf(name, sizeof(name), "idle/%d", i);
++		thread_set_name(th, name);
++		thread_bind(th, cpu_to_processor(i));
++		thread_start(th, idle_thread);
++		thread_doswapin(th);
++		(void) thread_resume(th);
++	    }
++	}
++
++	(void) kernel_thread(kernel_task, "reaper", reaper_thread, (char *) 0);
++	(void) kernel_thread(kernel_task, "swapin", swapin_thread, (char *) 0);
++	(void) kernel_thread(kernel_task, "sched", sched_thread, (char *) 0);
++#ifndef MACH_XEN
++	(void) kernel_thread(kernel_task, "intr", intr_thread, (char *)0);
++#endif	/* MACH_XEN */
++
++#if	NCPUS > 1
++	/*
++	 *	Create the shutdown thread.
++	 */
++	(void) kernel_thread(kernel_task, "action", action_thread, (char *) 0);
++
++	/*
++	 *	Allow other CPUs to run.
++	 */
++	start_other_cpus();
++#endif	/* NCPUS > 1 */
++
++	/*
++	 *	Create the device service.
++	 */
++	device_service_create();
++
++	/*
++	 * 	Initialize kernel task's creation time.
++	 * When we created the kernel task in task_init, the mapped
++	 * time was not yet available.  Now, last thing before starting
++	 * the user bootstrap, record the current time as the kernel
++	 * task's creation time.
++	 */
++	record_time_stamp (&kernel_task->creation_time);
++
++	/*
++	 *	Start the user bootstrap.
++	 */
++	bootstrap_create();
++
++#if	XPR_DEBUG
++	xprinit();		/* XXX */
++#endif	/* XPR_DEBUG */
++
++	/*
++	 *	Become the pageout daemon.
++	 */
++	(void) spl0();
++	thread_set_name(current_thread(), "pageout");
++	vm_pageout();
++	/*NOTREACHED*/
++}
++
++/*
++ *	Start up the first thread on a CPU.
++ *	First thread is specified for the master CPU.
++ */
++void cpu_launch_first_thread(thread_t th)
++{
++	int	mycpu;
++
++	mycpu = cpu_number();
++
++	cpu_up(mycpu);
++
++	start_timer(&kernel_timer[mycpu]);
++
++	/*
++	 * Block all interrupts for choose_thread.
++	 */
++	(void) splhigh();
++
++	if (th == THREAD_NULL)
++	    th = choose_thread(cpu_to_processor(mycpu));
++	if (th == THREAD_NULL)
++	    panic("cpu_launch_first_thread");
++
++	PMAP_ACTIVATE_KERNEL(mycpu);
++
++	percpu_assign(active_thread, th);
++	percpu_assign(active_stack, th->kernel_stack);
++	thread_lock(th);
++	th->state &= ~TH_UNINT;
++	thread_unlock(th);
++#if	NCPUS > 1
++	th->last_processor = cpu_to_processor(mycpu);
++#endif	/* NCPUS > 1 */
++	timer_switch(&th->system_timer);
++
++	PMAP_ACTIVATE_USER(vm_map_pmap(th->task->map), th, mycpu);
++
++	startrtclock();		/* needs an active thread */
++
++	load_context(th);
++	/*NOTREACHED*/
++}
+diff --git a/tests/test-multiboot b/tests/test-multiboot
+new file mode 100755
+index 00000000..5bd76c1c
+--- /dev/null
++++ b/tests/test-multiboot
+@@ -0,0 +1,37 @@
++#!/bin/sh
++
++# Test if the kernel image complies with the multiboot specification.
++
++# Copyright (C) 2023 Free Software Foundation, Inc.
++
++# This program is free software; you can redistribute it and/or modify it
++# under the terms of the GNU General Public License as published by the
++# Free Software Foundation; either version 2, or (at your option) any later
++# version.
++# 
++# This program is distributed in the hope that it will be useful, but
++# WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
++# or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
++# for more details.
++# 
++# You should have received a copy of the GNU General Public License along
++# with this program; if not, write to the Free Software Foundation, Inc.,
++# 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
++
++if $PLATFORM_XEN
++then
++  # ignore this test
++  exit 77
++fi
++
++[ -n "$GNUMACH" ] || GNUMACH=gnumach
++if grub-file --help > /dev/null 2>&1
++then grub-file --is-x86-multiboot $GNUMACH
++else
++  # `grub-file' is not available -- ignore this test.
++  exit 77
++fi
++
++# Local Variables:
++# mode: shell-script
++# End:
