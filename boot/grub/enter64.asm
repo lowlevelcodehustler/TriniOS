@@ -119,26 +119,34 @@ _start:
     jmp     .bad_boot
 
 1:
-    .code64
+    /* Still 32-bit here! The CPU only switches to 64-bit mode when CS is
+     * reloaded from a long-mode descriptor — which happens on the far jump
+     * below. This instruction must therefore be assembled in .code32: GAS
+     * rejects immediate-segment far jumps under .code64, and encoding it as
+     * 64-bit would be wrong anyway (the executing CPU is still in
+     * compatibility mode until CS changes). */
 
     /* ── Load our own GDT so we stop depending on GRUB's segment table.
      * Until now CS/SS came from whatever GDT GRUB left loaded; after the
      * far jump below all selectors refer to gdt64_start. */
     lgdt    gdt64_ptr
-    jmp     $0x08, $2f            /* Reload CS from our GDT (kernel code) */
+    jmp     $0x08, $2f            /* Reload CS from our GDT (long-mode descriptor) */
 
+.code64
 2:
     /* ── Set up 64-bit segment registers from our own GDT ─────────── */
-    mov     $0x10, %ax            /* kernel data selector */
+    movw    $0x10, %ax            /* kernel data selector */
     mov     %ax, %ds
     mov     %ax, %es
-    mov     $0x10, %ss            /* load SS directly (DPL 0 == CPL) */
+    movw    $0x10, %ss            /* load SS directly (DPL 0 == CPL); explicit w: immediate size is ambiguous for segment-register destinations */
     mov     %ax, %fs
     mov     %ax, %gs
 
     /* ── Load TSS (all-allow I/O bitmap) so ring-3 code may use
-     * out/in instructions without #GP ─────────────────────────────── */
-    ltr     $0x28
+     * out/in instructions without #GP. LTR takes a register or memory —
+     * not an immediate. ─────────────────────────────────────────────── */
+    movw    $0x28, %cx
+    ltr     %cx
 
     /* ── Set up 64-bit stack ───────────────────────────────────── */
     mov     $stack64_top, %rsp
@@ -247,16 +255,24 @@ tss_io_bitmap:                  /* offset 108 within the TSS */
  * hardcode physical addresses here (an earlier revision pointed at 0x2000/
  * 0x3000, where no tables exist). */
 
+    /* Each table is kept 16-byte aligned so its low bits are zero — which
+     * makes '+ 0x3' exactly equal to '| 0x3' for the P|R/W flags. GAS cannot
+     * emit a relocation for 'section_symbol | constant' (relocations are
+     * linear: sym + addend), but 'sym + 0x3' is a plain R_X86_64_64 and
+     * links fine. */
     .globl page_table_base
+.align 16
 page_table_base:
     /* PML4E[0] → PDPT (real address; virtual == physical in the identity map) */
-    .quad   page_table_pdpt | 0x3   /* P|R/W — supervisor only */
+    .quad   page_table_pdpt + 0x3   /* P|R/W — supervisor only */
     .fill   511, 8, 0
 
+.align 16
 page_table_pdpt:                /* covers virtual 0–512 GiB; entry 0 → PD */
-    .quad   page_table_pd | 0x3     /* P|R/W */
+    .quad   page_table_pd + 0x3     /* P|R/W */
     .fill   511, 8, 0
 
+.align 16
 page_table_pd:                  /* covers virtual 0–1 GiB */
     .quad   0xA7                    /* phase A: 2 MiB huge page at physical 0 (P|RW|US|PS) */
     .fill   511, 8, 0              /* entry [8] is set by kernel_main.c → pt_hi */
