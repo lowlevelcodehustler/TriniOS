@@ -15,6 +15,13 @@
 # Serial log: smoke-serial.log next to this script (matches *.log in
 # .gitignore). Kept after every run — inspect it when the test fails.
 #
+# Build order (NOTE: 'make -C boot/grub all' builds ONLY the kernel binary;
+# the ISO is produced by run_qemu.sh, so a successful make does NOT refresh
+# it — an unrefreshed ISO silently tests a previous build):
+#   make -C boot/initrd all      # hello.elf + initrd.cpio
+#   make -C boot/grub all        # kernel binary only
+#   ./run_qemu.sh -b             # rebuilds the ISO from current artifacts
+#
 # Assumptions: standard ISO built by ./run_qemu.sh -b (kernel + initrd,
 # default GRUB entry boots WITH initrd).
 #
@@ -56,7 +63,16 @@ fi
 
 if [ ! -f "$ISO_FILE" ]; then
     echo "[ERROR] ISO not found: $ISO_FILE"
-    echo "       Build it first: ./run_qemu.sh -b   (or make -C boot/grub all)"
+    echo "       Build it first: ./run_qemu.sh -b   (make -C boot/grub all only builds the kernel)"
+    exit 1
+fi
+
+# ── Staleness guard: an ISO older than the kernel binary is a previous
+# ── build — booting it tests nothing about the current tree.
+KERNEL_BIN="$ROOT_DIR/build/kernel/trini-kernel.bin"
+if [ -f "$KERNEL_BIN" ] && [ "$ISO_FILE" -ot "$KERNEL_BIN" ]; then
+    echo "[ERROR] ISO is older than $KERNEL_BIN — it is a stale image."
+    echo "        Rebuild the ISO first: ./run_qemu.sh -b   (then re-run this test)"
     exit 1
 fi
 
