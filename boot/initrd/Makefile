@@ -16,7 +16,9 @@ SHELL       := /bin/bash
 ROOTFS      := rootfs
 SRC_DIR     := src
 OUTPUT_DIR  := output
-INITRD_IMG  := $(OUTPUT_DIR)/initrd.cpio
+# cpio_newc content, .img name: run_qemu.sh and grub.cfg both expect
+# initrd.img (GRUB loads it as an opaque module — the extension is irrelevant).
+INITRD_IMG  := $(OUTPUT_DIR)/initrd.img
 
 # ── Toolchain for user-space programs ───────────────────────────────────
 CC          := x86_64-linux-gnu-gcc

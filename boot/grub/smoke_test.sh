@@ -18,7 +18,7 @@
 # Build order (NOTE: 'make -C boot/grub all' builds ONLY the kernel binary;
 # the ISO is produced by run_qemu.sh, so a successful make does NOT refresh
 # it — an unrefreshed ISO silently tests a previous build):
-#   make -C boot/initrd all      # hello.elf + initrd.cpio
+#   make -C boot/initrd all      # hello.elf + initrd.img (cpio_newc content)
 #   make -C boot/grub all        # kernel binary only
 #   ./run_qemu.sh -b             # rebuilds the ISO from current artifacts
 #
