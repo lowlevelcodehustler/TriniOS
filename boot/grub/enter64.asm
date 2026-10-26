@@ -138,7 +138,7 @@ _start:
     movw    $0x10, %ax            /* kernel data selector */
     mov     %ax, %ds
     mov     %ax, %es
-    movw    $0x10, %ss            /* load SS directly (DPL 0 == CPL); explicit w: immediate size is ambiguous for segment-register destinations */
+    mov     %ax, %ss              /* SS = kernel data selector (DPL 0 == CPL). Register form — GAS x86-64 rejects immediate-to-segment-register MOVs; %ax already holds the selector from above. */
     mov     %ax, %fs
     mov     %ax, %gs
 
