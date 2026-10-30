@@ -60,7 +60,12 @@ C_SRCS      := $(wildcard $(SRC_DIR)/*.c) \
                $(wildcard $(KERNEL_SRC)/*.c) \
                $(wildcard $(MM_SRC)/*.c) \
                $(wildcard $(IPC_SRC)/*.c) \
-               $(wildcard $(TASK_SRC)/*.c) \
+               # task_manager.c is excluded from the standalone bootable kernel:
+               # it wraps gnumach's native task/thread API (task_create,
+               # task_terminate, ...) and only links into an image that contains
+               # those symbols — the combined gnumach+TriniOS kernel built via
+               # Makefrag.trini. Nothing in this image calls it yet.
+               $(filter-out $(TASK_SRC)/task_manager.c, $(wildcard $(TASK_SRC)/*.c)) \
                $(wildcard $(HOST_SRC)/*.c) \
                $(wildcard $(ASI_SRC)/*.c) \
                $(wildcard $(TEST_SRC)/*.c)

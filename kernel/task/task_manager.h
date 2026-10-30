@@ -123,14 +123,17 @@ void task_manager_shutdown(void);
  * Task Lifecycle
  * ============================================================================ */
 
-/* Create a new task */
-kern_return_t task_create(const task_attr_t *attr, task_desc_t **task_out);
+/* Create a new task. Wraps the native Mach task_create() — gnumach owns
+ * process creation; TriniOS adds the PID index and descriptor bookkeeping.
+ * Named trini_* so it does not shadow (or multiply-define) the Mach API
+ * declaration from <mach/mach.h> included above. */
+kern_return_t trini_task_create(const task_attr_t *attr, task_desc_t **task_out);
 
 /* Destroy a task (cleanup) */
 kern_return_t task_destroy(task_desc_t *desc);
 
-/* Terminate a task */
-kern_return_t task_terminate(task_desc_t *desc, int exit_status);
+/* Terminate a task. Wraps the native Mach task_terminate(). */
+kern_return_t trini_task_terminate(task_desc_t *desc, int exit_status);
 
 /* Wait for a task to exit */
 kern_return_t task_wait(task_desc_t *desc, int *exit_status);

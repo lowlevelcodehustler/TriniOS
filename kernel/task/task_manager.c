@@ -1,8 +1,14 @@
 /*
  * TriniOS - Task & Thread Management Implementation
  *
- * Wraps Mach task/thread primitives for process lifecycle management.
- * Stub implementations for freestanding builds (no real Mach kernel yet).
+ * Wraps gnumach's native Mach task/thread primitives with a PID index and
+ * BSD-compatible descriptors: process creation/termination go through the
+ * microkernel's own API (task_create/task_terminate); the descriptor table
+ * is TriniOS' indexing layer on top of it.
+ *
+ * Built into the combined gnumach+TriniOS kernel via Makefrag.trini, where
+ * the native symbols exist; excluded from the standalone bootable kernel
+ * (see boot/grub/Makefile), which has no process management yet.
  */
 
 #include "task_manager.h"
@@ -63,7 +69,7 @@ void task_manager_shutdown(void)
     /* Terminate all tasks except init */
     for (uint32_t i = 0; i < MAX_TASKS; i++) {
         if (g_task_table[i] && g_task_table[i] != g_init_task) {
-            task_terminate(g_task_table[i], 137); /* SIGKILL */
+            trini_task_terminate(g_task_table[i], 137); /* SIGKILL */
             task_destroy(g_task_table[i]);
         }
     }
@@ -112,7 +118,7 @@ void task_free_pid(int pid)
  * Task Creation
  * ============================================================================ */
 
-kern_return_t task_create(const task_attr_t *attr, task_desc_t **task_out)
+kern_return_t trini_task_create(const task_attr_t *attr, task_desc_t **task_out)
 {
     task_desc_t *desc = NULL;
     task_t new_task;
@@ -132,9 +138,16 @@ kern_return_t task_create(const task_attr_t *attr, task_desc_t **task_out)
         return KERN_RESOURCE_SHORTAGE;
     }
 
-    /* Create Mach task (stub: use mach_task_self for now)
-     * In a real implementation, this would call task_create() RPC to the kernel. */
-    new_task = mach_task_self();
+    /* Create the underlying Mach task via the native API — gnumach owns
+     * process creation; TriniOS only indexes it (PID + descriptor). */
+    {
+        task_t parent = (attr->parent != TASK_NULL) ? attr->parent : mach_task_self();
+        kern_return_t kr = task_create(parent, attr->inherit_ports, &new_task);
+        if (kr != KERN_SUCCESS) {
+            free(desc);
+            return kr;
+        }
+    }
 
     /* Fill in descriptor */
     desc->task = new_task;
@@ -273,7 +286,7 @@ kern_return_t task_destroy(task_desc_t *desc)
  * Task Termination
  * ============================================================================ */
 
-kern_return_t task_terminate(task_desc_t *desc, int exit_status)
+kern_return_t trini_task_terminate(task_desc_t *desc, int exit_status)
 {
     if (!desc) {
         return KERN_INVALID_ARGUMENT;
@@ -282,8 +295,8 @@ kern_return_t task_terminate(task_desc_t *desc, int exit_status)
     desc->exit_status = exit_status;
     desc->state = TASK_STATE_ZOMBIE;
 
-    /* Stub: in a real implementation, this would call task_suspend() RPC */
-    return KERN_SUCCESS;
+    /* Terminate the underlying Mach task via the native API. */
+    return task_terminate(desc->task);
 }
 
 kern_return_t task_wait(task_desc_t *desc, int *exit_status)
