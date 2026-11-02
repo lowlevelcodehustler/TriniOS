@@ -268,11 +268,13 @@ page_table_base:
     .fill   511, 8, 0
 
 .align 16
+.globl page_table_pdpt          /* exported: kernel_main.c reads/writes phase-B PDEs */
 page_table_pdpt:                /* covers virtual 0–512 GiB; entry 0 → PD */
     .quad   page_table_pd + 0x3     /* P|R/W */
     .fill   511, 8, 0
 
 .align 16
+.globl page_table_pd            /* exported: setup_user_page_tables() rewrites PDE[0]/PDE[8] */
 page_table_pd:                  /* covers virtual 0–1 GiB */
     .quad   0xA7                    /* phase A: 2 MiB huge page at physical 0 (P|RW|US|PS) */
     .fill   511, 8, 0              /* entry [8] is set by kernel_main.c → pt_hi */
