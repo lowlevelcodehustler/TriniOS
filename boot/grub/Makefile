@@ -90,6 +90,7 @@ all: $(OUTPUT_BIN)
 $(OUTPUT_BIN): $(ALL_OBJS) $(SRC_DIR)/kernel.ld
 	@echo "[LINK] Linking kernel..."
 	$(LD) $(LDFLAGS) -o $(OUTPUT_BIN) $(ALL_OBJS)
+	@echo "[HDR] First 64 bytes (the multiboot2 header GRUB will parse):"; od -A d -t x1 $(OUTPUT_BIN) | head -n 4
 
 # ── Assemble 64-bit: GAS --64 ─────────────────────────────────────────
 $(BUILD_DIR)/enter64.o: $(SRC_DIR)/enter64.asm
