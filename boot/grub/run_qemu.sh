@@ -75,6 +75,18 @@ if [ ! -f "$KERNEL_BIN" ]; then
     exit 1
 fi
 
+# ── Staleness guard (same logic as smoke_test.sh) ───────────────────────
+# Without -b we boot whatever ISO already exists — warn loudly if it
+# predates the current kernel/initrd, so a stale image is never booted
+# silently (round-6 lesson: an old ISO with an old kernel produced a
+# confusing GRUB 'unsupported tag' error).
+if [ "$BUILD_ISO" -eq 0 ] && [ -f "$ISO_FILE" ]; then
+    if [ "$KERNEL_BIN" -nt "$ISO_FILE" ] || [ "$INITRD_IMG" -nt "$ISO_FILE" ]; then
+        echo "[WARN] $ISO_FILE is older than the kernel/initrd artifacts."
+        echo "       It may contain a STALE kernel — rebuild with: $0 -b <your flags>"
+    fi
+fi
+
 # ── Build ISO if needed ────────────────────────────────────────────────
 if [ "$BUILD_ISO" -eq 1 ] || [ ! -f "$ISO_FILE" ]; then
     echo "[*] Building GRUB2 ISO..."
